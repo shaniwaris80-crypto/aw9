@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -32,6 +31,15 @@ jobs:
           done < <(find js -type f -name '*.js' -print0)
           node --check firebase-config.js
           node --check service-worker.js
+
+      - name: Comprobar enlaces entre módulos
+        shell: bash
+        run: |
+          set -euo pipefail
+          for entry in js/app.js js/numbering-guard.js js/period-lock.js js/integrity.js js/device-security.js js/mobile-ui.js; do
+            echo "Empaquetando $entry"
+            npx --yes esbuild@0.25.0 "$entry" --bundle --format=esm --platform=browser --outfile="/tmp/$(basename "$entry").bundle.js" --external:https://*
+          done
 
       - name: Comprobar imports locales
         shell: python
