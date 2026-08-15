@@ -3,8 +3,13 @@ service firebase.storage {
   match /b/{bucket}/o {
     function signedIn(){ return request.auth != null; }
     function owner(){ return signedIn() && request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2'; }
-    function memberPath(){ return /databases/(default)/documents/companies/arw2026/members/$(request.auth.uid); }
-    function active(){ return owner() || (signedIn() && firestore.exists(memberPath()) && firestore.get(memberPath()).data.active == true); }
+    function active(){
+      return owner() || (
+        signedIn()
+        && firestore.exists(/databases/(default)/documents/companies/arw2026/members/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/companies/arw2026/members/$(request.auth.uid)).data.active == true
+      );
+    }
     function allowedType(){
       return request.resource.contentType.matches('image/.*')
         || request.resource.contentType == 'application/pdf'
