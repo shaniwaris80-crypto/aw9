@@ -3,18 +3,17 @@ import {n,round2,uid,nowISO,daysBetween} from './utils.js';
 export const PRODUCT_MODES={caja_kg:'CAJA × KG',caja_fija:'CAJA FIJA',kg:'KG',ud:'UD',manojo:'MANOJO'};
 export function lineFromProduct(product,client=null){
   const custom=client?.prices?.[product.id];
-  return {id:uid('line'),productId:product.id,code:product.code||'',product:product.name||'',mode:product.mode||'kg',qty:0,kgPerBox:n(product.kgPerBox),gross:0,tare:0,net:0,unit:product.unit||'kg',price:n(custom?.price??product.sellPrice),vat:n(product.vat??4),discount:0,base:0,vatAmount:0,total:0};
+  return {id:uid('line'),productId:product.id,code:product.code||'',product:product.name||'',mode:product.mode||'kg',qty:0,kgPerBox:n(product.kgPerBox),gross:0,tare:0,net:0,unit:product.unit||'kg',price:n(custom?.price??product.sellPrice),vat:n(product.vat??4),discount:0,buyPriceSnapshot:n(product.buyPrice),base:0,vatAmount:0,total:0};
 }
 export function calcLine(line){
   let billQty=0;
-  const qty=n(line.qty), kg=n(line.kgPerBox), gross=n(line.gross), tare=n(line.tare);
+  const qty=n(line.qty),kg=n(line.kgPerBox),gross=n(line.gross),tare=n(line.tare);
   if(line.mode==='caja_kg'){
     const theoretical=round2(qty*kg);
     line.net=(gross>0?round2(Math.max(0,gross-tare)):theoretical);
-    billQty=line.net;
-    line.unit='kg';
-  } else if(line.mode==='caja_fija'){line.net=qty;billQty=qty;line.unit='caja'}
-  else {line.net=qty;billQty=qty;line.unit=line.mode==='ud'?'ud':line.mode==='manojo'?'manojo':'kg'}
+    billQty=line.net;line.unit='kg';
+  }else if(line.mode==='caja_fija'){line.net=qty;billQty=qty;line.unit='caja'}
+  else{line.net=qty;billQty=qty;line.unit=line.mode==='ud'?'ud':line.mode==='manojo'?'manojo':'kg'}
   const grossBase=round2(billQty*n(line.price));
   const disc=round2(grossBase*n(line.discount)/100);
   line.base=round2(grossBase-disc);
@@ -23,20 +22,36 @@ export function calcLine(line){
   return line;
 }
 export function calcInvoice(inv){
-  inv.lines=(inv.lines||[]).map(l=>calcLine({...l})).filter(l=>l.productId&&n(l.qty)>0);
-  const productBase=round2(inv.lines.reduce((s,l)=>s+n(l.base),0));
-  const transportBase=inv.transportType==='percent'?round2(productBase*n(inv.transportValue)/100):round2(n(inv.transportValue));
-  const globalDiscount=round2(productBase*n(inv.discount||0)/100);
-  const factor=productBase?Math.max(0,(productBase-globalDiscount+transportBase)/productBase):1;
+  const isCredit=inv.type==='credit';
+  const sign=isCredit?-1:1;
+  let lines=(inv.lines||[]).map(l=>calcLine({...l})).filter(l=>l.productId&&n(l.qty)>0);
+  const rawProductBase=round2(lines.reduce((s,l)=>s+n(l.base),0));
+  const rawTransport=inv.transportType==='percent'?round2(rawProductBase*n(inv.transportValue)/100):round2(n(inv.transportValue));
+  const rawDiscount=round2(rawProductBase*n(inv.discount||0)/100);
+  const factor=rawProductBase?Math.max(0,(rawProductBase-rawDiscount+rawTransport)/rawProductBase):1;
   const vats={};
-  for(const l of inv.lines){const rate=n(l.vat);const adjustedBase=round2(n(l.base)*factor);if(!vats[rate])vats[rate]={rate,base:0,vat:0};vats[rate].base=round2(vats[rate].base+adjustedBase);vats[rate].vat=round2(vats[rate].vat+adjustedBase*rate/100)}
-  const base=round2(Object.values(vats).reduce((s,x)=>s+x.base,0));
-  const vatTotal=round2(Object.values(vats).reduce((s,x)=>s+x.vat,0));
+  for(const l of lines){const rate=n(l.vat);const adjustedBase=round2(n(l.base)*factor);if(!vats[rate])vats[rate]={rate,base:0,vat:0};vats[rate].base=round2(vats[rate].base+adjustedBase);vats[rate].vat=round2(vats[rate].vat+adjustedBase*rate/100)}
+  let vatBreakdown=Object.values(vats).sort((a,b)=>a.rate-b.rate).map(v=>({rate:v.rate,base:round2(v.base*sign),vat:round2(v.vat*sign)}));
+  if(isCredit)lines=lines.map(l=>({...l,base:round2(-Math.abs(l.base)),vatAmount:round2(-Math.abs(l.vatAmount)),total:round2(-Math.abs(l.total))}));
+  const productBase=round2(rawProductBase*sign),transportBase=round2(rawTransport*sign),globalDiscount=round2(rawDiscount*sign);
+  const base=round2(vatBreakdown.reduce((s,x)=>s+x.base,0));
+  const vatTotal=round2(vatBreakdown.reduce((s,x)=>s+x.vat,0));
   const total=round2(base+vatTotal);
-  const paid=round2(n(inv.paid));
-  return {...inv,productBase,transportBase,globalDiscount,vatBreakdown:Object.values(vats).sort((a,b)=>a.rate-b.rate),base,vatTotal,total,paid,pending:round2(Math.max(0,total-paid)),paymentStatus:paid<=0?'pending':paid+0.009>=total?'paid':'partial'};
+  const paid=isCredit?0:round2(n(inv.paid));
+  const pending=isCredit?total:round2(Math.max(0,total-paid));
+  const paymentStatus=isCredit?'credited':paid<=0?'pending':paid+0.009>=total?'paid':'partial';
+  return {...inv,lines,productBase,transportBase,globalDiscount,vatBreakdown,base,vatTotal,total,paid,pending,paymentStatus};
 }
-export function invoiceStatus(inv){if(inv.status==='void')return'ANULADA';if(inv.status==='draft')return'BORRADOR';const x=calcInvoice(inv);if(x.paymentStatus==='paid')return'PAGADA';if(x.paymentStatus==='partial')return'PARCIAL';if(inv.dueDate&&daysBetween(inv.dueDate)>0)return'VENCIDA';return'PENDIENTE'}
+export function invoiceStatus(inv){
+  if(inv.type==='credit')return'RECTIFICATIVA';
+  if(inv.status==='void')return'ANULADA';
+  if(inv.status==='draft')return'BORRADOR';
+  const x=calcInvoice(inv);
+  if(x.paymentStatus==='paid')return'PAGADA';
+  if(x.paymentStatus==='partial')return'PARCIAL';
+  if(inv.dueDate&&daysBetween(inv.dueDate)>0)return'VENCIDA';
+  return'PENDIENTE';
+}
 export function stockForProduct(state,productId,location='ALL'){
   const moves=(state.stockMovements||[]).filter(m=>m.productId===productId&&(location==='ALL'||m.location===location));
   const physical=round2(moves.reduce((s,m)=>s+n(m.qty),0));
@@ -46,6 +61,6 @@ export function stockForProduct(state,productId,location='ALL'){
 }
 export function stockDisplay(product,qty){if(product.mode==='caja_kg'&&n(product.kgPerBox)>0){const boxes=round2(n(qty)/n(product.kgPerBox));return `${boxes} CAJAS · ${round2(qty)} KG`}return `${round2(qty)} ${String(product.unit||product.mode).toUpperCase()}`}
 export function clientBalance(state,clientId){const inv=(state.invoices||[]).filter(x=>x.clientId===clientId&&x.status!=='void'&&x.status!=='draft');return round2(inv.reduce((s,x)=>s+calcInvoice(x).pending,0))}
-export function marginLine(line,product){const q=line.mode==='caja_kg'?n(line.net):n(line.qty);const revenue=n(line.base);const cost=q*n(product?.buyPrice);return {revenue:round2(revenue),cost:round2(cost),profit:round2(revenue-cost),margin:revenue?round2((revenue-cost)/revenue*100):0}}
+export function marginLine(line,product){const q=line.mode==='caja_kg'?n(line.net):n(line.qty);const revenue=n(line.base);const cost=q*n(line.buyPriceSnapshot??product?.buyPrice);return {revenue:round2(revenue),cost:round2(cost),profit:round2(revenue-cost),margin:revenue?round2((revenue-cost)/revenue*100):0}}
 export function makeStockMove({productId,qty,location='ALMACEN',type='adjustment',sourceId='',note=''}){return {id:uid('mov'),productId,qty:round2(qty),location,type,sourceId,note,date:new Date().toISOString().slice(0,10),createdAt:nowISO()}}
 export function nextInvoiceNo(settings){const n0=n(settings.nextInvoiceNumber||1);return `${settings.invoiceSeries||'FA'}-${String(n0).padStart(n(settings.invoiceDigits||5),'0')}`}
