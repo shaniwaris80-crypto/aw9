@@ -1,0 +1,86 @@
+name: Instalar seguro ARW2026 v2
+
+on:
+  push:
+    branches: [arw2026v2-safe-installer]
+    paths: ['.github/workflows/install-safe-arw2026v2.yml']
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Reconstruir paquete verificado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          : > /tmp/arw2026.b64
+          gh api repos/${{ github.repository }}/issues/2 --jq .body >> /tmp/arw2026.b64
+          gh api repos/${{ github.repository }}/issues/comments/5303589138 --jq .body >> /tmp/arw2026.b64
+          gh api repos/${{ github.repository }}/issues/comments/5303614358 --jq .body >> /tmp/arw2026.b64
+          gh api repos/${{ github.repository }}/issues/comments/5303595677 --jq .body >> /tmp/arw2026.b64
+          gh api repos/${{ github.repository }}/issues/comments/5303602580 --jq .body >> /tmp/arw2026.b64
+          gh api repos/${{ github.repository }}/issues/comments/5303618919 --jq .body >> /tmp/arw2026.b64
+          gh api repos/${{ github.repository }}/issues/comments/5303623183 --jq .body >> /tmp/arw2026.b64
+          gh api repos/${{ github.repository }}/issues/comments/5303627148 --jq .body >> /tmp/arw2026.b64
+          gh api repos/${{ github.repository }}/issues/comments/5303631378 --jq .body >> /tmp/arw2026.b64
+          tr -d '\n\r ' < /tmp/arw2026.b64 > /tmp/arw2026.clean.b64
+          test "$(wc -c < /tmp/arw2026.clean.b64)" -eq 84388
+          base64 -d /tmp/arw2026.clean.b64 > /tmp/arw2026.tar.gz
+          echo '7be803e6b7562a68cc5a87b9c0c0f92017b5b4bf7e0602c8699b67c423aadef0  /tmp/arw2026.tar.gz' | sha256sum -c -
+          rm -rf /tmp/arw2026-new && mkdir -p /tmp/arw2026-new
+          tar -xzf /tmp/arw2026.tar.gz -C /tmp/arw2026-new
+
+      - name: Corregir generación conocida
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          app=Path('/tmp/arw2026-new/js/app.js')
+          s=app.read_text(encoding='utf-8')
+          s=s.replace("import {calcInvoice,clientBalance,stockForProduct} from './core/domain.js';","import {calcInvoice,clientBalance,stockForProduct,lineFromProduct} from './core/domain.js';",1)
+          s=s.replace("...(await import('./core/domain.js')).lineFromProduct(p,c)","...lineFromProduct(p,c)",1)
+          app.write_text(s,encoding='utf-8')
+
+          u=Path('/tmp/arw2026-new/js/core/utils.js')
+          s=u.read_text(encoding='utf-8')
+          start=s.index('export function csvParse')
+          end=s.index('export async function fileToDataUrl',start)
+          fixed="export function csvParse(text){const lines=text.split(/\\r?\\n/).filter(Boolean);if(!lines.length)return[];const sep=lines[0].includes(';')?';':',';const headers=lines[0].split(sep).map(x=>x.trim());return lines.slice(1).map(line=>Object.fromEntries(line.split(sep).map((v,i)=>[headers[i],v.trim()]))) }\n"
+          s=s[:start]+fixed+s[end:]
+          s=s.replace(".replace(/[̀-ͯ]/g,'')",".replace(/[\\u0300-\\u036f]/g,'')")
+          u.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Validación profunda
+        run: |
+          cd /tmp/arw2026-new
+          python - <<'PY'
+          from pathlib import Path
+          text_ext={'.js','.html','.css','.md','.yml','.yaml','.json','.webmanifest','.rules'}
+          for p in Path('.').rglob('*'):
+              if p.is_file() and (p.suffix in text_ext or p.name in {'.nojekyll'}): p.read_text(encoding='utf-8')
+          PY
+          find js -name '*.js' -print0 | xargs -0 -n1 node --check
+          npx --yes esbuild@0.25.9 js/app.js --bundle --format=esm --outfile=/tmp/arw2026-bundle.js --external:https://* --log-level=warning
+          test -f index.html && test -f firestore.rules && test -f storage.rules && test -f service-worker.js && test -f manifest.webmanifest
+          ! find . -type f \( -name 'app-code-*' -o -name 'box-billing.js' -o -name 'invoice-uppercase.js' -o -name 'login-access.js' -o -name 'fix-arw2026.yml' -o -name 'install-arw2026v2.yml' \) | grep .
+
+      - name: Publicar main limpio
+        run: |
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a /tmp/arw2026-new/. .
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'ARW2026 v2 completo limpio validado'
+          git push origin HEAD:main --force-with-lease=refs/heads/main:f70370b5c5ffd9743f4876fd9ae70c74767d72e1
