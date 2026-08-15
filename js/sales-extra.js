@@ -2,8 +2,7 @@ import {Store,st,product,selectedInvoices,refresh,esc,n,round2,toast,modal,close
 import {invoicesView as baseInvoicesView} from './sales.js';
 
 export function invoicesViewPlus(){
-  const html=baseInvoicesView();
-  return html.replace('CAMBIO MASIVO TARIFAS</button>','CAMBIO MASIVO TARIFAS</button><button class="btn" data-act="bulkDraftLines">MODIFICAR BORRADORES SELECCIONADOS</button>');
+  return `${baseInvoicesView()}<div class="actions" style="margin-top:12px"><button class="btn" data-act="bulkDraftLines">MODIFICAR BORRADORES SELECCIONADOS</button></div>`;
 }
 
 export function bulkDraftInvoicesModal(){
