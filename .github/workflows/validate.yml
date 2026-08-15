@@ -1,0 +1,30 @@
+name: Validar ARW2026
+on: [push, pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Sintaxis JS
+        run: |
+          find js -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check firebase-config.js
+          node --check service-worker.js
+      - name: Pruebas de dominio
+        run: node tests/domain.test.mjs
+      - name: Imports locales
+        run: |
+          python3 - <<'PY'
+          import pathlib,re,sys
+          bad=[]
+          for p in pathlib.Path('js').rglob('*.js'):
+              text=p.read_text()
+              for x in re.findall(r"from\s+['\"](\.[^'\"]+)['\"]",text):
+                  q=(p.parent/x).resolve()
+                  if not q.exists(): bad.append((str(p),x))
+          if bad:
+              print(bad);sys.exit(1)
+          print('Imports OK')
+          PY
