@@ -1,7 +1,7 @@
 import { firebaseConfig, ARW } from '../firebase-config.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import { getAnalytics, isSupported as analyticsSupported } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js';
-import { getAuth, setPersistence, browserLocalPersistence, browserSessionPersistence, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
+import { getAuth, setPersistence, browserLocalPersistence, browserSessionPersistence, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { getFirestore, collection, doc, getDocs, getDoc, setDoc, deleteDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 
@@ -13,8 +13,11 @@ export const storage=getStorage(app);
 export const companyPath=['companies',ARW.companyId];
 export const col=name=>collection(db,...companyPath,name);
 export const ref=(name,id)=>doc(db,...companyPath,name,id);
+const googleProvider=new GoogleAuthProvider();
+googleProvider.setCustomParameters({prompt:'select_account'});
 export const authApi={
   login:async(email,password,remember=true)=>{await setPersistence(auth,remember?browserLocalPersistence:browserSessionPersistence);return signInWithEmailAndPassword(auth,email,password)},
+  loginGoogle:async(remember=true)=>{await setPersistence(auth,remember?browserLocalPersistence:browserSessionPersistence);return signInWithPopup(auth,googleProvider)},
   logout:()=>signOut(auth),
   onChange:onAuthStateChanged
 };
