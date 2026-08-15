@@ -2,7 +2,7 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn(){ return request.auth != null; }
-    function owner(){ return signedIn() && request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2'; }
+    function owner(){ return signedIn() && (request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2' || request.auth.token.email == 'shaniwaris80@gmail.com'); }
     function active(){
       return owner() || (
         signedIn()
