@@ -10,7 +10,7 @@ service cloud.firestore {
     function billing(){ return manager() || role() == 'billing'; }
     function warehouse(){ return manager() || role() == 'warehouse'; }
     function delivery(){ return manager() || role() == 'delivery'; }
-    function specialCollection(c){ return c in ['members','settings','audit','invoices','payments']; }
+    function specialCollection(c){ return c in ['members','settings','audit','invoices','payments','stockMovements']; }
 
     match /companies/arw2026/members/{uid} {
       allow read: if owner() || (signedIn() && request.auth.uid == uid);
@@ -42,12 +42,18 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /companies/arw2026/stockMovements/{id} {
+      allow read: if active();
+      allow create: if warehouse() || billing();
+      allow update, delete: if warehouse();
+    }
+
     match /companies/arw2026/{collection}/{doc=**} {
       allow read: if !specialCollection(collection) && active();
       allow create, update, delete: if !specialCollection(collection) && (
         manager()
-        || (billing() && collection in ['clients','quotes','proformas','deliveryNotes','creditNotes','priceRules','communications','documents','closures','cashMovements','bankMovements','expenses'])
-        || (warehouse() && collection in ['products','suppliers','purchases','supplierPayments','stockMovements','transfers','wastes','returns','inventoryCounts','containers'])
+        || (billing() && collection in ['clients','orders','quotes','proformas','deliveryNotes','creditNotes','priceRules','communications','documents','closures','cashMovements','bankMovements','expenses'])
+        || (warehouse() && collection in ['products','suppliers','purchases','supplierPayments','transfers','wastes','returns','inventoryCounts','containers'])
         || (delivery() && collection in ['orders','routes','deliveries'])
       );
     }
