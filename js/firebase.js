@@ -3,13 +3,13 @@ import {MASTER_PRODUCTS,MASTER_CLIENTS,MASTER_SUPPLIERS,MASTER_VERSION} from './
 import {calcInvoice,stockMovementQty,now,uid,normalize} from './domain.js';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
 import {getAuth,setPersistence,browserLocalPersistence,signInWithEmailAndPassword,signInWithPopup,GoogleAuthProvider,signOut,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
-import {getFirestore,collection,doc,getDoc,getDocs,setDoc,deleteDoc,updateDoc,onSnapshot,writeBatch,runTransaction,query,orderBy,limit,enableMultiTabIndexedDbPersistence,serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
+import {getFirestore,collection,doc,getDoc,getDocs,setDoc,deleteDoc,updateDoc,onSnapshot,writeBatch,runTransaction,query,orderBy,limit,enableMultiTabIndexedDbPersistence} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 
 const app=initializeApp(FIREBASE_CONFIG);
 export const auth=getAuth(app);
 export const db=getFirestore(app);
 enableMultiTabIndexedDbPersistence(db).catch(()=>{});
-const google=new GoogleAuthProvider();
+const googleProvider=new GoogleAuthProvider();
 const root=()=>doc(db,'companies',ARW.appId);
 const col=name=>collection(root(),name);
 const ref=(name,id)=>doc(root(),name,id);
@@ -17,9 +17,16 @@ const ref=(name,id)=>doc(root(),name,id);
 export const COLLECTIONS=['products','clients','suppliers','orders','invoices','payments','purchases','stockMoves','expenses','routes','priceHistory','audit','settings','series','closures','transfers','wastes','returns','inventoryCounts','quotes','proformas','deliveryNotes','cashMovements','bankMovements','communications','containers','notifications'];
 
 export const authApi={
-  async email(email,password){await setPersistence(auth,browserLocalPersistence);return signInWithEmailAndPassword(auth,email,password)},
-  async google(){await setPersistence(auth,browserLocalPersistence);return signInWithPopup(auth,google)},
-  logout:()=>signOut(auth),on:onAuthStateChanged
+  async email(email,password){
+    await setPersistence(auth,browserLocalPersistence);
+    return signInWithEmailAndPassword(auth,email,password);
+  },
+  async google(){
+    await setPersistence(auth,browserLocalPersistence);
+    return signInWithPopup(auth,googleProvider);
+  },
+  logout:()=>signOut(auth),
+  on:callback=>onAuthStateChanged(auth,callback)
 };
 
 export const isOwner=user=>!!user&&(user.uid===ARW.ownerUid||String(user.email||'').toLowerCase()===ARW.ownerEmail.toLowerCase());
@@ -78,7 +85,10 @@ export function subscribeCollections(onState,onError){
 export async function saveEntity(name,obj,action='save',user=null){
   const id=obj.id||uid(name.slice(0,3));
   await setDoc(ref(name,id),{...obj,id,updatedAt:now()},{merge:true});
-  if(user)await setDoc(ref('audit',uid('a')),{id:uid('a'),action,entity:name,entityId:id,userEmail:user.email||'',userUid:user.uid,at:now()});
+  if(user){
+    const auditId=uid('a');
+    await setDoc(ref('audit',auditId),{id:auditId,action,entity:name,entityId:id,userEmail:user.email||'',userUid:user.uid,at:now()});
+  }
   return id;
 }
 export async function deleteEntity(name,id){await deleteDoc(ref(name,id));}
@@ -86,7 +96,8 @@ export async function deleteEntity(name,id){await deleteDoc(ref(name,id));}
 export async function saveDraft(invoice,user){
   const id=invoice.id||uid('inv');
   await setDoc(ref('invoices',id),{...invoice,id,status:'draft',updatedAt:now()},{merge:true});
-  await setDoc(ref('audit',uid('a')),{action:'DRAFT_SAVE',entity:'invoices',entityId:id,userEmail:user?.email||'',at:now()});
+  const auditId=uid('a');
+  await setDoc(ref('audit',auditId),{id:auditId,action:'DRAFT_SAVE',entity:'invoices',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});
   return id;
 }
 
@@ -117,7 +128,7 @@ export async function recordPayment(payment,user){
     const snaps=[];for(const item of refs)snaps.push({item,snap:await tx.get(item.ir)});
     tx.set(ref('payments',id),{...payment,id,createdAt:now()});
     for(const {item,snap} of snaps){if(!snap.exists())continue;const inv=snap.data();tx.set(item.ir,{paid:Number(inv.paid||0)+Number(item.a.amount||0),updatedAt:now()},{merge:true});}
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'PAYMENT',entity:'payments',entityId:id,userEmail:user?.email||'',at:now()});
+    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'PAYMENT',entity:'payments',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});
   });
   return id;
 }
@@ -126,7 +137,7 @@ export async function voidInvoice(invoice,{returnStock=false,reason=''},user){
   await runTransaction(db,async tx=>{
     tx.set(ref('invoices',invoice.id),{status:'void',voidReason:String(reason||'').toUpperCase(),voidedAt:now(),updatedAt:now()},{merge:true});
     if(returnStock)for(const line of calcInvoice(invoice).lines){const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:stockMovementQty(line),type:'void_return',location:'ALMACEN',sourceId:invoice.id,note:`ANULADA ${invoice.number}`,date:new Date().toISOString().slice(0,10),createdAt:now()});}
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'INVOICE_VOID',entity:'invoices',entityId:invoice.id,reason,userEmail:user?.email||'',at:now()});
+    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'INVOICE_VOID',entity:'invoices',entityId:invoice.id,reason,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});
   });
 }
 
@@ -140,7 +151,7 @@ export async function createRectification(original,newLines,reason,user,directio
     tx.set(ref('invoices',id),{...credit,issuedAt:now(),updatedAt:now()});
     tx.set(sref,{...s,next:next+1,updatedAt:now()},{merge:true});
     tx.set(ref('invoices',original.id),{rectificationIds:[...(original.rectificationIds||[]),id],updatedAt:now()},{merge:true});
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'RECTIFICATION',entity:'invoices',entityId:id,originalId:original.id,userEmail:user?.email||'',at:now()});
+    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'RECTIFICATION',entity:'invoices',entityId:id,originalId:original.id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});
     return credit;
   });
 }
