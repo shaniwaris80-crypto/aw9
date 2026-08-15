@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn(){ return request.auth != null; }
-    function owner(){ return signedIn() && request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2'; }
+    function owner(){ return signedIn() && (request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2' || request.auth.token.email == 'shaniwaris80@gmail.com'); }
     function member(){ return /databases/$(database)/documents/companies/arw2026/members/$(request.auth.uid); }
     function active(){ return owner() || (signedIn() && exists(member()) && get(member()).data.active == true); }
     function role(){ return owner() ? 'owner' : (active() ? get(member()).data.role : 'none'); }
