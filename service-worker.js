@@ -1,1 +1,45 @@
-const CACHE='arw2026-v3-20260815';const CORE=['./','./index.html','./styles.css','./firebase-config.js','./js/data.js','./js/domain.js','./js/firebase.js','./js/pdf.js','./js/app.js'];self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)))});self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request).then(r=>{const c=r.clone();caches.open(CACHE).then(x=>x.put(e.request,c));return r}).catch(()=>caches.match(e.request)))})
+const CACHE='arw2026-v4-20260815-2202';
+const CORE=['./','./index.html','./styles.css','./firebase-config.js','./js/data.js','./js/domain.js','./js/firebase.js','./js/pdf.js','./js/app.js'];
+
+self.addEventListener('install',event=>{
+  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));
+});
+
+self.addEventListener('activate',event=>{
+  event.waitUntil(
+    caches.keys()
+      .then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key))))
+      .then(()=>self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch',event=>{
+  const request=event.request;
+  if(request.method!=='GET')return;
+
+  let url;
+  try{url=new URL(request.url);}catch{return;}
+  if(url.protocol!=='http:'&&url.protocol!=='https:')return;
+
+  // Solo gestionamos y cacheamos recursos del propio ARW2026.
+  // Recursos de extensiones del navegador o CDNs pasan directamente por red.
+  if(url.origin!==self.location.origin)return;
+
+  event.respondWith(
+    fetch(request)
+      .then(response=>{
+        if(response&&response.ok&&response.type==='basic'){
+          const copy=response.clone();
+          caches.open(CACHE).then(cache=>cache.put(request,copy)).catch(()=>{});
+        }
+        return response;
+      })
+      .catch(async()=>{
+        const cached=await caches.match(request);
+        if(cached)return cached;
+        if(request.mode==='navigate')return caches.match('./index.html');
+        throw new Error('RECURSO NO DISPONIBLE SIN CONEXIÓN');
+      })
+  );
+});
