@@ -1,0 +1,10 @@
+{
+  "name": "AW9 · FACTUMADRID",
+  "short_name": "AW9",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "lang": "es",
+  "icons": []
+}
