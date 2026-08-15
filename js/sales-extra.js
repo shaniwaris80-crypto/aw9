@@ -2,7 +2,9 @@ import {Store,st,product,selectedInvoices,refresh,esc,n,round2,toast,modal,close
 import {invoicesView as baseInvoicesView} from './sales.js';
 
 export function invoicesViewPlus(){
-  return `${baseInvoicesView()}<div class="actions" style="margin-top:12px"><button class="btn" data-act="bulkDraftLines">MODIFICAR BORRADORES SELECCIONADOS</button></div>`;
+  let html=baseInvoicesView();
+  html=html.replace(/(<button class="mini" data-act="pdfInvoice" data-id="([^"]+)">PDF<\/button>)/g,'$1<button class="mini" data-act="rectifyInvoice" data-id="$2">RECTIFICAR</button>');
+  return `${html}<div class="actions" style="margin-top:12px"><button class="btn" data-act="bulkDraftLines">MODIFICAR BORRADORES SELECCIONADOS</button></div>`;
 }
 
 export function bulkDraftInvoicesModal(){
