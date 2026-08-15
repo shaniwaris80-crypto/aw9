@@ -1,2 +1,24 @@
 rules_version = '2';
-service firebase.storage { match /b/{bucket}/o { function signedIn(){return request.auth!=null;} function owner(){return signedIn()&&request.auth.uid=='o6rMhcEyUXUstmb7ptClXSv8ejQ2';} match /companies/arw2026/{all=**}{ allow read: if signedIn(); allow write: if owner() || (signedIn() && request.resource.size < 15 * 1024 * 1024); } match /{all=**}{allow read,write: if false;} } }
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn(){ return request.auth != null; }
+    function owner(){ return signedIn() && request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2'; }
+    function memberPath(){ return /databases/(default)/documents/companies/arw2026/members/$(request.auth.uid); }
+    function active(){ return owner() || (signedIn() && firestore.exists(memberPath()) && firestore.get(memberPath()).data.active == true); }
+    function allowedType(){
+      return request.resource.contentType.matches('image/.*')
+        || request.resource.contentType == 'application/pdf'
+        || request.resource.contentType == 'application/json'
+        || request.resource.contentType == 'text/plain'
+        || request.resource.contentType == 'text/csv'
+        || request.resource.contentType == 'application/vnd.ms-excel'
+        || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    }
+    match /companies/arw2026/{all=**} {
+      allow read: if active();
+      allow create, update: if active() && request.resource.size < 15 * 1024 * 1024 && allowedType();
+      allow delete: if owner();
+    }
+    match /{all=**} { allow read, write: if false; }
+  }
+}
