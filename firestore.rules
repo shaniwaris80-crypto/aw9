@@ -10,18 +10,48 @@ service cloud.firestore {
     function billing(){ return manager() || role() == 'billing'; }
     function warehouse(){ return manager() || role() == 'warehouse'; }
     function delivery(){ return manager() || role() == 'delivery'; }
-    match /companies/arw2026/members/{uid} { allow read: if owner() || (signedIn() && request.auth.uid==uid); allow write: if owner(); }
-    match /companies/arw2026/settings/{doc=**} { allow read: if active(); allow write: if manager(); }
-    match /companies/arw2026/audit/{id} { allow read: if manager(); allow create: if active(); allow update,delete: if false; }
-    match /companies/arw2026/invoices/{id} { allow read: if active(); allow create,update: if billing(); allow delete: if billing() && resource.data.status == 'draft'; }
-    match /companies/arw2026/payments/{id} { allow read: if active(); allow create: if billing(); allow update: if manager(); allow delete: if false; }
-    match /companies/arw2026/{collection}/{doc=**} {
+    function specialCollection(c){ return c in ['members','settings','audit','invoices','payments']; }
+
+    match /companies/arw2026/members/{uid} {
+      allow read: if owner() || (signedIn() && request.auth.uid == uid);
+      allow create, update, delete: if owner();
+    }
+
+    match /companies/arw2026/settings/{doc=**} {
       allow read: if active();
-      allow write: if manager()
+      allow create, update: if manager();
+      allow delete: if owner();
+    }
+
+    match /companies/arw2026/audit/{id} {
+      allow read: if manager();
+      allow create: if active();
+      allow update, delete: if false;
+    }
+
+    match /companies/arw2026/invoices/{id} {
+      allow read: if active();
+      allow create, update: if billing();
+      allow delete: if billing() && resource.data.status == 'draft';
+    }
+
+    match /companies/arw2026/payments/{id} {
+      allow read: if active();
+      allow create: if billing();
+      allow update: if manager();
+      allow delete: if false;
+    }
+
+    match /companies/arw2026/{collection}/{doc=**} {
+      allow read: if !specialCollection(collection) && active();
+      allow create, update, delete: if !specialCollection(collection) && (
+        manager()
         || (billing() && collection in ['clients','quotes','proformas','deliveryNotes','creditNotes','priceRules','communications','documents','closures','cashMovements','bankMovements','expenses'])
         || (warehouse() && collection in ['products','suppliers','purchases','supplierPayments','stockMovements','transfers','wastes','returns','inventoryCounts','containers'])
-        || (delivery() && collection in ['orders','routes','deliveries']);
+        || (delivery() && collection in ['orders','routes','deliveries'])
+      );
     }
-    match /{doc=**} { allow read,write: if false; }
+
+    match /{doc=**} { allow read, write: if false; }
   }
 }
