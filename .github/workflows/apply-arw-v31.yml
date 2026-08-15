@@ -1,0 +1,34 @@
+name: Aplicar ARW2026 v3.1
+on:
+  push:
+    paths: ['.arw-update/READY']
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verificar y aplicar módulos
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .arw-update/part* | base64 -d > /tmp/arw2026.tgz
+          echo 'e58e6e05757466d87a9408145e0a3fde404f3c3fd7d6450ca599cd68d3575aa2  /tmp/arw2026.tgz' | sha256sum -c -
+          rm -rf /tmp/arw31 && mkdir -p /tmp/arw31
+          tar -xzf /tmp/arw2026.tgz -C /tmp/arw31
+          cp /tmp/arw31/js/views-master.js js/views-master.js
+          cp /tmp/arw31/js/views-sales.js js/views-sales.js
+          cp /tmp/arw31/js/views-admin.js js/views-admin.js
+          cp /tmp/arw31/firebase-config.js firebase-config.js
+          cp /tmp/arw31/index.html index.html
+          cp /tmp/arw31/service-worker.js service-worker.js
+          cp /tmp/arw31/tests/domain.test.mjs tests/domain.test.mjs
+          git config user.name 'ARW2026 Builder'
+          git config user.email 'actions@users.noreply.github.com'
+          git add js/views-master.js js/views-sales.js js/views-admin.js firebase-config.js index.html service-worker.js tests/domain.test.mjs
+          git diff --cached --check
+          git commit -m 'Completar ARW2026 v3.1: RE, importadores y factura profesional'
+          git push origin HEAD:main
