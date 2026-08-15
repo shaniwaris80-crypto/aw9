@@ -1,0 +1,61 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn(){ return request.auth != null; }
+    function isOwner(){ return signedIn() && request.auth.uid == "o6rMhcEyUXUstmb7ptClXSv8ejQ2"; }
+    function memberExists(){ return signedIn() && exists(/databases/$(database)/documents/companies/aw9/members/$(request.auth.uid)); }
+    function activeMember(){ return isOwner() || (memberExists() && get(/databases/$(database)/documents/companies/aw9/members/$(request.auth.uid)).data.active == true); }
+    function role(){ return isOwner() ? "owner" : (memberExists() ? get(/databases/$(database)/documents/companies/aw9/members/$(request.auth.uid)).data.role : "none"); }
+    function manager(){ return isOwner() || role() in ["admin","manager"]; }
+    function billing(){ return manager() || role() == "billing"; }
+    function warehouse(){ return manager() || role() == "warehouse"; }
+    function delivery(){ return manager() || role() == "delivery"; }
+
+    match /companies/aw9/members/{uid} {
+      allow read: if isOwner() || (signedIn() && request.auth.uid == uid);
+      allow create, update, delete: if isOwner();
+    }
+    match /companies/aw9/settings/{doc=**} {
+      allow read: if activeMember();
+      allow create, update: if manager();
+      allow delete: if isOwner();
+    }
+    match /companies/aw9/invoices/{id} {
+      allow read: if activeMember();
+      allow create, update: if billing();
+      allow delete: if billing() && resource.data.status == "draft";
+    }
+    match /companies/aw9/payments/{id} {
+      allow read: if activeMember();
+      allow create: if billing();
+      allow update: if manager();
+      allow delete: if false;
+    }
+    match /companies/aw9/audit/{id} {
+      allow read: if manager();
+      allow create: if activeMember();
+      allow update, delete: if false;
+    }
+    match /companies/aw9/products/{id} { allow read: if activeMember(); allow write: if warehouse() || manager(); }
+    match /companies/aw9/purchases/{id} { allow read: if activeMember(); allow write: if warehouse() || manager(); }
+    match /companies/aw9/stockMovements/{id} { allow read: if activeMember(); allow write: if warehouse() || manager() || billing(); }
+    match /companies/aw9/suppliers/{id} { allow read: if activeMember(); allow write: if warehouse() || manager(); }
+    match /companies/aw9/shops/{id} { allow read: if activeMember(); allow write: if warehouse() || manager(); }
+    match /companies/aw9/wastes/{id} { allow read: if activeMember(); allow write: if warehouse() || manager(); }
+    match /companies/aw9/returns/{id} { allow read: if activeMember(); allow write: if warehouse() || billing() || manager(); }
+    match /companies/aw9/transfers/{id} { allow read: if activeMember(); allow write: if warehouse() || manager(); }
+    match /companies/aw9/clients/{id} { allow read: if activeMember(); allow write: if billing() || manager(); }
+    match /companies/aw9/priceRules/{id} { allow read: if activeMember(); allow write: if billing() || manager(); }
+    match /companies/aw9/expenses/{id} { allow read: if activeMember(); allow write: if manager() || billing(); }
+    match /companies/aw9/orders/{id} { allow read: if activeMember(); allow write: if delivery() || billing() || manager(); }
+    match /companies/aw9/routes/{id} { allow read: if activeMember(); allow write: if delivery() || manager(); }
+    match /companies/aw9/deliveries/{id} { allow read: if activeMember(); allow write: if delivery() || manager(); }
+    match /companies/aw9/closures/{id} { allow read: if activeMember(); allow write: if manager(); }
+    match /companies/aw9/cashMovements/{id} { allow read: if activeMember(); allow write: if manager() || billing(); }
+    match /companies/aw9/bankMovements/{id} { allow read: if activeMember(); allow write: if manager() || billing(); }
+    match /companies/aw9/documents/{id} { allow read: if activeMember(); allow write: if billing() || manager(); }
+    match /companies/aw9/supplierPayments/{id} { allow read: if activeMember(); allow write: if warehouse() || manager(); }
+    match /companies/aw9/{document=**} { allow read, write: if false; }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
