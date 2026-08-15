@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "companies": {
+      "aw9": {
+        ".read": "auth != null && auth.token.email == 'shaniwaris80@gmail.com'",
+        ".write": "auth != null && auth.token.email == 'shaniwaris80@gmail.com'"
+      }
+    }
+  }
+}
