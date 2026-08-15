@@ -1,127 +1,125 @@
-# ARW2026
+# ARW2026 v2
 
-Sistema integral nuevo para pedidos, preparación/compra, Ruta Madrid, reparto real, facturación, cobros, clientes, stock, compras, proveedores, almacenes/tiendas, documentos, gastos, caja, bancos, IVA, cierres, análisis, usuarios y auditoría.
+Reconstrucción completa y limpia del sistema de gestión y facturación para Ruta Madrid y operaciones de fruta/verdura.
 
-## Flujo principal
+## Flujo central
 
-**PEDIDO → PREPARACIÓN / COMPRA → CARGA → REPARTO REAL → PRECIO DEL CLIENTE → REVISIÓN → FACTURA PDF → COBRO → HISTORIAL**
+**PEDIDO → PREPARACIÓN / COMPRA → CARGA → REPARTO REAL → PRECIOS DEL CLIENTE → REVISIÓN → FACTURA → ENVÍO → COBRO → HISTORIAL**
 
-La cantidad pedida no se factura automáticamente: se factura la cantidad realmente entregada.
+La cantidad pedida nunca se factura automáticamente: se factura lo realmente entregado.
 
-## Facturación profesional
+## Facturación
 
 - 10 líneas visibles por defecto.
-- Modos: CAJA × KG, CAJA FIJA, KG, UD y MANOJO.
-- Conversión caja→kg usando KG/CAJA.
+- CAJA × KG, CAJA FIJA, KG, UD y MANOJO.
+- Conversión automática: 2 cajas × 22 kg = 44 kg facturables.
 - BRUTO, TARA y NETO.
 - IVA individual 0/4/10/21 por línea.
-- Precio específico por cliente o precio general.
-- Transporte fijo o porcentual, descuentos y pagos parciales.
-- Borradores sin consumir numeración definitiva.
-- Numeración protegida frente a emisión simultánea en varios dispositivos.
-- PDF profesional en mayúsculas con CÓDIGO, PRODUCTO, MODO, CANTIDAD, KG/CAJA, BRUTO, TARA, NETO, PRECIO, IVA e IMPORTE.
-- Pagada, pendiente, parcial, vencida, anulada y rectificativa.
-- Anulación con motivo, auditoría y reversión opcional de stock/cobro.
-- Rectificativas parciales vinculadas a factura original; base/IVA/total negativos.
-- Selección de borradores y cambio masivo de precios.
-- ZIP de facturas del día y preparación para WhatsApp.
+- Precio general o precio personalizado por cliente.
+- Historial de precios, precios bloqueados, simulación y cambios masivos.
+- Transporte fijo/% y descuentos por línea/general.
+- Vista previa antes de emitir.
+- Comprobación pedido → entregado → facturado.
+- Aviso de duplicados, margen bajo y venta bajo coste.
+- Borradores sin consumir numeración.
+- Numeración transaccional multi-dispositivo y múltiples series.
+- Factura emitida bloqueada: correcciones mediante rectificativa/anulación.
+- Rectificativas totales/parciales ligadas a la original.
+- Anulación con motivo y trazabilidad.
+- PDF profesional en MAYÚSCULAS, IVA por producto, desglose fiscal, IBAN, QR interno, saldo anterior opcional y copia interna con costes/margen.
+- Estado pagada/parcial/pendiente/vencida/anulada.
+- Factura semanal juntando varias entregas.
+- ZIP de facturas del día, WhatsApp, email preparado y registro de comunicaciones.
 
-## Clientes
+## Pedidos / clientes
 
-- Ficha 360º.
-- Datos fiscales, teléfono/WhatsApp, forma de pago y límite de crédito.
-- Precios personalizados por producto.
-- Histórico de facturas, IVA, pedidos y saldos.
+- Cliente 360º: datos fiscales, pagos, facturas, pedidos, IVA, comunicaciones, archivos, límite de crédito y clasificación A/B/C.
+- Pedidos recurrentes y plantillas.
+- Duplicar pedido.
+- Clientes que faltan por pedir y “NO PIDE ESTA SEMANA”.
+- Pegar pedido de WhatsApp con reconocimiento automático por nombre/código.
+- Productos habituales, historial de precios y comparador entre clientes.
 - Estado de cuenta PDF y WhatsApp de saldo.
-- Cobros totales/parciales y aplicación a facturas antiguas.
-- Antigüedad de deuda y alertas de crédito.
+- Deuda por antigüedad.
 
-## Pedidos / Ruta Madrid
+## Reparto / Ruta Madrid
 
-- Pedido, preparado y entregado por línea.
-- Lista de compra automática: pedidos + stock mínimo − stock físico.
-- Hoja de carga.
-- Ruta con pedidos/clientes asignados.
+- Pedido, preparado, cargado, entregado y facturado.
+- Firma táctil, foto, incidencia, hora y GPS opcional.
+- Cliente cerrado/no encontrado/rechazado/entrega parcial.
+- Cobro durante la entrega.
+- Rutas con paradas, zonas y enlaces de navegación.
+- Hoja de carga y retorno esperado: cargado − entregado.
 - Costes de combustible, peajes, personal y otros.
-- Ventas, coste de mercancía y beneficio estimado por ruta.
-- Cierre de ruta y control de pedidos sin terminar.
+- Rentabilidad estimada de ruta.
 
 ## Stock / compras
 
-- Stock físico, reservado y disponible.
-- Cajas + kg visibles.
-- Valor a coste y venta potencial.
+- Físico, reservado y disponible.
+- Cajas + kg visibles y valor a coste.
+- Lotes, FIFO, antigüedad y stock envejecido.
+- Mercancía en tránsito (compras pedidas no recibidas).
+- Pedido proveedor → recepción real → lote → stock.
+- Diferencia entre cantidad pedida y recibida.
+- Transporte de compra imputado al coste.
+- Coste actualizado e historial.
 - Almacén, furgoneta, San Pablo, San Lesmes y Santiago.
-- Compras con entrada automática de stock.
-- Coste actualizado e histórico de compras.
-- Traspasos, mermas, devoluciones e inventario físico.
-- Control de envases/cajas por cliente.
-- Pagos y saldo de proveedores.
+- Traspasos, mermas, devoluciones, inventario físico y envases retornables.
+- Comparador de proveedores por coste histórico.
+- Escáner de código de barras cuando el navegador lo soporta.
 
-## Documentos
+## Finanzas
 
-- Presupuestos.
-- Proformas.
-- Albaranes con/sin precios.
-- Conversión directa a factura sin reescribir líneas.
-- Facturas rectificativas ligadas a la original.
+- Cobros totales/parciales y aplicación automática a facturas antiguas.
+- Justificante PDF de cobro.
+- Gastos, caja, bancos y varias cuentas.
+- Arqueo de caja.
+- Importación CSV bancaria y conciliación por importe.
+- Previsión de cobros y deuda a proveedores.
 
-## Finanzas / análisis
-
-- Gastos, caja y bancos.
-- Importación CSV bancaria.
-- Sugerencias de conciliación por importe y aplicación a factura.
-- Previsión de cobros 30 días y deuda de proveedores.
-- Producto 360º: stock, ventas, compras, coste, beneficio y margen estimado.
-- Clientes que reducen compras.
-- Precios especiales bajo coste.
-- Deuda por antigüedad.
-
-## Reportes / cierre
+## Reportes / control
 
 - Mensual, trimestral y anual.
-- IVA por tipo.
-- Exportación de facturas a Excel.
-- Rectificativas con signo negativo en base e IVA.
-- Revisión de duplicados, saltos de numeración, IVA, caja×kg, stock negativo y entregas sin facturar.
-- Fotografía de stock al cierre.
-- Bloqueo de periodos cerrados.
+- IVA repercutido/soportado por tipo.
+- Libro de ventas y compras en Excel.
+- Rentabilidad por cliente/producto/ruta.
+- Stock a Excel.
+- Cierre mensual con control de numeración, IVA, cajas/kg, stock negativo y entregas sin facturar.
+- Foto de stock al cierre y bloqueo del periodo.
+- Centro de análisis: precios bajo margen, clientes que compran menos, inactivos, stock envejecido y oportunidades comerciales.
 
 ## Seguridad / Firebase
 
-Proyecto Firebase: `aw999-71828`.
+- Firebase Authentication Email/Password y Google opcional.
+- Propietario: `shaniwaris80@gmail.com` / UID `o6rMhcEyUXUstmb7ptClXSv8ejQ2`.
+- Firestore con caché persistente multi-pestaña: los cambios se encolan offline y sincronizan al recuperar conexión.
+- Reglas por roles: owner/admin/manager/billing/warehouse/delivery.
+- Permisos específicos de UI para costes, precios, anulación, rectificación, stock y cierres.
+- Auditoría inmutable.
+- PIN rápido local con hash.
+- Firebase Storage para firma/fotos/adjuntos/backups si Storage está habilitado.
 
-Datos de ARW2026 aislados en `companies/arw2026`.
+## PWA
 
-Propietario inicial:
-- `shaniwaris80@gmail.com`
-- UID `o6rMhcEyUXUstmb7ptClXSv8ejQ2`
+- Instalable en iPhone/Android/PC.
+- Navegación inferior móvil: INICIO · PEDIDOS · FACTURAR · STOCK · MÁS.
+- Service worker con caché versionada.
+- Email precargado y sesión persistente.
 
-La contraseña NO se guarda en el repositorio.
+## Integraciones que requieren servicio externo
 
-### Obligatorio en Firebase Console
+ARW2026 deja preparadas las opciones, pero no simula servicios inexistentes. El envío 100% automático de PDF adjunto por WhatsApp/email, push remoto, biometría centralizada y VeriFactu real requieren API/backend/proveedor específico y configuración legal/técnica adicional.
+
+## Firebase Console
 
 1. Authentication → Email/Password activado.
 2. Authorized domains → `shaniwaris80-crypto.github.io`.
 3. Firestore `(default)` creado.
-4. Publicar el contenido de `firestore.rules`.
-5. Si se usa Storage, publicar `storage.rules`.
-
-Roles: owner, admin, manager, billing, warehouse y delivery. Auditoría no se puede borrar/modificar desde las reglas normales.
-
-## PWA / móvil
-
-- Instalable como PWA.
-- Caché de aplicación.
-- Navegación móvil inferior: INICIO · PEDIDOS · FACTURAR · STOCK · MÁS.
-- Email de acceso precargado y sesión persistente.
-
-## Integraciones externas
-
-La descarga ZIP/PDF, enlaces WhatsApp y generación local de documentos funcionan en navegador. El envío totalmente automático de archivos adjuntos por WhatsApp o email, biometría centralizada y VeriFactu requieren API/servicio externo o backend específico; no se simulan como si estuvieran conectados.
+4. Publicar `firestore.rules`.
+5. Para archivos, activar Storage y publicar `storage.rules`.
 
 ## GitHub Pages
 
-Publicación desde `main` y `/`:
+Publicación desde `main` `/`:
 
 `https://shaniwaris80-crypto.github.io/aw9/`

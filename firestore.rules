@@ -3,61 +3,93 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn(){ return request.auth != null; }
     function owner(){ return signedIn() && (request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2' || request.auth.token.email == 'shaniwaris80@gmail.com'); }
-    function member(){ return /databases/$(database)/documents/companies/arw2026/members/$(request.auth.uid); }
-    function active(){ return owner() || (signedIn() && exists(member()) && get(member()).data.active == true); }
-    function role(){ return owner() ? 'owner' : (active() ? get(member()).data.role : 'none'); }
+    function memberPath(){ return /databases/$(database)/documents/companies/arw2026/members/$(request.auth.uid); }
+    function memberExists(){ return signedIn() && exists(memberPath()); }
+    function active(){ return owner() || (memberExists() && get(memberPath()).data.active == true); }
+    function role(){ return owner() ? 'owner' : (active() ? get(memberPath()).data.role : 'none'); }
     function manager(){ return owner() || role() in ['admin','manager']; }
     function billing(){ return manager() || role() == 'billing'; }
     function warehouse(){ return manager() || role() == 'warehouse'; }
     function delivery(){ return manager() || role() == 'delivery'; }
-    function specialCollection(c){ return c in ['members','settings','audit','invoices','payments','stockMovements']; }
+    function special(c){ return c in ['members','settings','audit','invoices','payments','stockMovements','lots','closures','series','businessUnits','backups']; }
 
     match /companies/arw2026/members/{uid} {
       allow read: if owner() || (signedIn() && request.auth.uid == uid);
       allow create, update, delete: if owner();
     }
-
-    match /companies/arw2026/settings/{doc=**} {
+    match /companies/arw2026/settings/{id} {
       allow read: if active();
       allow create, update: if manager();
       allow delete: if owner();
     }
-
     match /companies/arw2026/audit/{id} {
       allow read: if manager();
       allow create: if active();
       allow update, delete: if false;
     }
-
     match /companies/arw2026/invoices/{id} {
-      allow read: if active();
-      allow create, update: if billing();
+      allow read: if billing();
+      allow create: if billing();
+      allow update: if manager() || (billing() && (
+        resource.data.status == 'draft'
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status','sentAt','paid','paymentStatus','rectificationIds','voidReason','voidedAt','updatedAt'
+        ])
+      ));
       allow delete: if billing() && resource.data.status == 'draft';
     }
-
     match /companies/arw2026/payments/{id} {
-      allow read: if active();
+      allow read: if billing();
       allow create: if billing();
       allow update: if manager();
       allow delete: if false;
     }
-
     match /companies/arw2026/stockMovements/{id} {
-      allow read: if active();
+      allow read: if warehouse() || billing();
       allow create: if warehouse() || billing();
-      allow update, delete: if warehouse();
+      allow update, delete: if manager();
     }
-
-    match /companies/arw2026/{collection}/{doc=**} {
-      allow read: if !specialCollection(collection) && active();
-      allow create, update, delete: if !specialCollection(collection) && (
+    match /companies/arw2026/lots/{id} {
+      allow read: if warehouse() || billing();
+      allow create, update: if warehouse() || billing();
+      allow delete: if manager();
+    }
+    match /companies/arw2026/closures/{id} {
+      allow read: if manager() || billing();
+      allow create: if manager();
+      allow update, delete: if owner();
+    }
+    match /companies/arw2026/series/{id} {
+      allow read: if manager() || billing();
+      allow create: if manager();
+      allow update: if manager() || (billing() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['next','updatedAt']));
+      allow delete: if owner();
+    }
+    match /companies/arw2026/businessUnits/{id} {
+      allow read: if active();
+      allow create, update: if manager();
+      allow delete: if owner();
+    }
+    match /companies/arw2026/backups/{id} {
+      allow read, create: if manager();
+      allow update, delete: if owner();
+    }
+    match /companies/arw2026/{collection}/{id} {
+      allow read: if !special(collection) && active() && (
         manager()
-        || (billing() && collection in ['clients','orders','quotes','proformas','deliveryNotes','creditNotes','priceRules','communications','documents','closures','cashMovements','bankMovements','expenses'])
-        || (warehouse() && collection in ['products','suppliers','purchases','supplierPayments','transfers','wastes','returns','inventoryCounts','containers'])
-        || (delivery() && collection in ['orders','routes','deliveries'])
+        || (billing() && collection in ['clients','products','orders','orderTemplates','deliveries','quotes','proformas','deliveryNotes','priceHistory','priceChanges','communications','attachments','cashMovements','bankAccounts','bankMovements','expenses','notifications'])
+        || (warehouse() && collection in ['products','suppliers','purchases','supplierPayments','transfers','wastes','returns','inventoryCounts','containers','attachments','orders','notifications'])
+        || (delivery() && collection in ['clients','products','orders','routes','deliveries','communications','attachments','containers','notifications'])
+        || (role() == 'viewer' && collection in ['clients','products'])
       );
+      allow create, update: if !special(collection) && active() && (
+        manager()
+        || (billing() && collection in ['clients','orders','orderTemplates','deliveries','quotes','proformas','deliveryNotes','priceHistory','priceChanges','communications','attachments','cashMovements','bankMovements','notifications'])
+        || (warehouse() && collection in ['products','suppliers','purchases','supplierPayments','transfers','wastes','returns','inventoryCounts','containers','attachments'])
+        || (delivery() && collection in ['orders','routes','deliveries','communications','attachments','containers'])
+      );
+      allow delete: if !special(collection) && manager();
     }
-
-    match /{doc=**} { allow read, write: if false; }
+    match /{document=**} { allow read, write: if false; }
   }
 }
