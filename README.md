@@ -17,8 +17,18 @@ Toda la información operativa se guarda en Firestore bajo `companies/arw2026` y
 ## Facturas emitidas
 Las facturas emitidas no se sobrescriben para corregir precios. La herramienta de corrección masiva genera facturas rectificativas enlazadas a las originales. Los borradores sí admiten edición masiva directa.
 
+## ARW2026 v3.1
+- Total de factura destacado en un recuadro compacto y pie PDF simplificado.
+- Recargo de equivalencia configurable por cliente y separado por tipo de IVA.
+- Buscadores sin pérdida de foco al escribir varias letras seguidas.
+- Importación de compras mediante texto `ARW2026_COMPRA_V1` o texto libre, con vista previa, detección de duplicados y actualización de stock/coste.
+- Instrucción copiable para convertir fotos/PDF de facturas de proveedor con ChatGPT al formato que entiende ARW2026.
+- Copiar/pegar pedidos para interpretarlos por código, nombre o alias, guardarlos como pedido o abrirlos directamente como factura.
+- Reconocimiento protegido frente a confusiones entre códigos cortos como MM, MA o MV.
+- Pruebas automáticas de caja × kg, transporte, IVA, recargo e importadores.
+
 ## Publicación Firebase
 Publicar manualmente `firestore.rules` y, si se usa Storage, `storage.rules` en el proyecto `aw999-71828`. Autorizar el dominio `shaniwaris80-crypto.github.io` en Authentication.
 
 ## Validación
-`node tests/domain.test.mjs` comprueba caja × kg y cálculos críticos.
+`node tests/domain.test.mjs` comprueba caja × kg, IVA, transporte, recargo de equivalencia e importadores críticos.
