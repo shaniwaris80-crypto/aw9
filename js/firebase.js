@@ -17,14 +17,8 @@ const ref=(name,id)=>doc(root(),name,id);
 export const COLLECTIONS=['products','clients','suppliers','orders','invoices','payments','purchases','stockMoves','expenses','routes','priceHistory','audit','settings','series','closures','transfers','wastes','returns','inventoryCounts','quotes','proformas','deliveryNotes','cashMovements','bankMovements','communications','containers','notifications'];
 
 export const authApi={
-  async email(email,password){
-    await setPersistence(auth,browserLocalPersistence);
-    return signInWithEmailAndPassword(auth,email,password);
-  },
-  async google(){
-    await setPersistence(auth,browserLocalPersistence);
-    return signInWithPopup(auth,googleProvider);
-  },
+  async email(email,password){await setPersistence(auth,browserLocalPersistence);return signInWithEmailAndPassword(auth,email,password)},
+  async google(){await setPersistence(auth,browserLocalPersistence);return signInWithPopup(auth,googleProvider)},
   logout:()=>signOut(auth),
   on:callback=>onAuthStateChanged(auth,callback)
 };
@@ -70,35 +64,20 @@ export async function ensureMasterData(user){
 }
 
 export function subscribeCollections(onState,onError){
-  const state=Object.fromEntries(COLLECTIONS.map(c=>[c,[]]));
-  const unsubs=[];
-  for(const name of COLLECTIONS){
-    const q=name==='audit'?query(col(name),orderBy('at','desc'),limit(300)):col(name);
-    unsubs.push(onSnapshot(q,snap=>{
-      state[name]=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>!x.archived);
-      onState({...state});
-    },err=>onError?.(name,err)));
-  }
+  const state=Object.fromEntries(COLLECTIONS.map(c=>[c,[]]));const unsubs=[];
+  for(const name of COLLECTIONS){const q=name==='audit'?query(col(name),orderBy('at','desc'),limit(300)):col(name);unsubs.push(onSnapshot(q,snap=>{state[name]=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>!x.archived);onState({...state})},err=>onError?.(name,err)))}
   return()=>unsubs.forEach(u=>u());
 }
 
 export async function saveEntity(name,obj,action='save',user=null){
-  const id=obj.id||uid(name.slice(0,3));
-  await setDoc(ref(name,id),{...obj,id,updatedAt:now()},{merge:true});
-  if(user){
-    const auditId=uid('a');
-    await setDoc(ref('audit',auditId),{id:auditId,action,entity:name,entityId:id,userEmail:user.email||'',userUid:user.uid,at:now()});
-  }
+  const id=obj.id||uid(name.slice(0,3));await setDoc(ref(name,id),{...obj,id,updatedAt:now()},{merge:true});
+  if(user){const auditId=uid('a');await setDoc(ref('audit',auditId),{id:auditId,action,entity:name,entityId:id,userEmail:user.email||'',userUid:user.uid,at:now()})}
   return id;
 }
 export async function deleteEntity(name,id){await deleteDoc(ref(name,id));}
 
 export async function saveDraft(invoice,user){
-  const id=invoice.id||uid('inv');
-  await setDoc(ref('invoices',id),{...invoice,id,status:'draft',updatedAt:now()},{merge:true});
-  const auditId=uid('a');
-  await setDoc(ref('audit',auditId),{id:auditId,action:'DRAFT_SAVE',entity:'invoices',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});
-  return id;
+  const id=invoice.id||uid('inv');await setDoc(ref('invoices',id),{...invoice,id,status:'draft',updatedAt:now()},{merge:true});const auditId=uid('a');await setDoc(ref('audit',auditId),{id:auditId,action:'DRAFT_SAVE',entity:'invoices',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});return id;
 }
 
 export async function emitInvoice(invoice,user){
@@ -108,51 +87,29 @@ export async function emitInvoice(invoice,user){
     const sref=ref('series',sid);const ss=await tx.get(sref);const s=ss.exists()?ss.data():{prefix:sid,next:1,digits:5};
     const next=Number(s.next||1),number=`${s.prefix||sid}-${String(next).padStart(Number(s.digits||5),'0')}`;
     const emitted={...calc,id:invoiceId,number,status:'issued',issuedAt:now(),updatedAt:now(),clientSnapshot:invoice.clientSnapshot||null};
-    tx.set(ref('invoices',invoiceId),emitted,{merge:false});
-    tx.set(sref,{...s,id:sid,next:next+1,updatedAt:now()},{merge:true});
-    for(const line of emitted.lines){
-      const qty=stockMovementQty(line);const mid=uid('sm');
-      tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:-qty,type:'sale',location:'ALMACEN',sourceId:invoiceId,note:`FACTURA ${number}`,date:invoice.date,createdAt:now()});
-    }
-    for(const orderId of invoice.sourceOrderIds||[]){tx.set(ref('orders',orderId),{status:'invoiced',invoiceId,updatedAt:now()},{merge:true});}
-    if(Number(emitted.paid||0)>0){const pid=uid('pay');tx.set(ref('payments',pid),{id:pid,clientId:invoice.clientId,date:invoice.date,amount:Number(emitted.paid),method:invoice.paymentMethod||'efectivo',allocations:[{invoiceId,amount:Number(emitted.paid)}],createdAt:now()});}
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'INVOICE_ISSUE',entity:'invoices',entityId:invoiceId,number,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});
-    return emitted;
+    tx.set(ref('invoices',invoiceId),emitted,{merge:false});tx.set(sref,{...s,id:sid,next:next+1,updatedAt:now()},{merge:true});
+    for(const line of emitted.lines){const qty=stockMovementQty(line);const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:-qty,type:'sale',location:'ALMACEN',sourceId:invoiceId,note:`FACTURA ${number}`,date:invoice.date,createdAt:now()})}
+    for(const orderId of invoice.sourceOrderIds||[]){tx.set(ref('orders',orderId),{status:'invoiced',invoiceId,updatedAt:now()},{merge:true})}
+    if(Number(emitted.paid||0)>0){const pid=uid('pay');tx.set(ref('payments',pid),{id:pid,clientId:invoice.clientId,date:invoice.date,amount:Number(emitted.paid),method:invoice.paymentMethod||'efectivo',allocations:[{invoiceId,amount:Number(emitted.paid)}],createdAt:now()})}
+    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'INVOICE_ISSUE',entity:'invoices',entityId:invoiceId,number,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});return emitted;
   });
 }
 
 export async function recordPayment(payment,user){
-  const id=payment.id||uid('pay');
-  await runTransaction(db,async tx=>{
-    const refs=(payment.allocations||[]).map(a=>({a,ir:ref('invoices',a.invoiceId)}));
-    const snaps=[];for(const item of refs)snaps.push({item,snap:await tx.get(item.ir)});
-    tx.set(ref('payments',id),{...payment,id,createdAt:now()});
-    for(const {item,snap} of snaps){if(!snap.exists())continue;const inv=snap.data();tx.set(item.ir,{paid:Number(inv.paid||0)+Number(item.a.amount||0),updatedAt:now()},{merge:true});}
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'PAYMENT',entity:'payments',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});
-  });
-  return id;
+  const id=payment.id||uid('pay');await runTransaction(db,async tx=>{const refs=(payment.allocations||[]).map(a=>({a,ir:ref('invoices',a.invoiceId)}));const snaps=[];for(const item of refs)snaps.push({item,snap:await tx.get(item.ir)});tx.set(ref('payments',id),{...payment,id,createdAt:now()});for(const {item,snap} of snaps){if(!snap.exists())continue;const inv=snap.data();tx.set(item.ir,{paid:Number(inv.paid||0)+Number(item.a.amount||0),updatedAt:now()},{merge:true})}const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'PAYMENT',entity:'payments',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()})});return id;
 }
 
 export async function voidInvoice(invoice,{returnStock=false,reason=''},user){
-  await runTransaction(db,async tx=>{
-    tx.set(ref('invoices',invoice.id),{status:'void',voidReason:String(reason||'').toUpperCase(),voidedAt:now(),updatedAt:now()},{merge:true});
-    if(returnStock)for(const line of calcInvoice(invoice).lines){const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:stockMovementQty(line),type:'void_return',location:'ALMACEN',sourceId:invoice.id,note:`ANULADA ${invoice.number}`,date:new Date().toISOString().slice(0,10),createdAt:now()});}
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'INVOICE_VOID',entity:'invoices',entityId:invoice.id,reason,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});
-  });
+  await runTransaction(db,async tx=>{tx.set(ref('invoices',invoice.id),{status:'void',voidReason:String(reason||'').toUpperCase(),voidedAt:now(),updatedAt:now()},{merge:true});if(returnStock)for(const line of calcInvoice(invoice).lines){const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:stockMovementQty(line),type:'void_return',location:'ALMACEN',sourceId:invoice.id,note:`ANULADA ${invoice.number}`,date:new Date().toISOString().slice(0,10),createdAt:now()})}const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'INVOICE_VOID',entity:'invoices',entityId:invoice.id,reason,userEmail:user?.email||'',userUid:user?.uid||'',at:now()})});
 }
 
 export async function createRectification(original,newLines,reason,user,direction='credit'){
   if(!navigator.onLine)throw new Error('SE NECESITA CONEXIÓN PARA RECTIFICAR');
   const sid=original.seriesId||'FA';const id=uid('inv');
   return runTransaction(db,async tx=>{
-    const sref=ref('series',sid);const ss=await tx.get(sref);const s=ss.exists()?ss.data():{prefix:sid,next:1,digits:5};
-    const next=Number(s.next||1),number=`${s.prefix||sid}-R${String(next).padStart(Number(s.digits||5),'0')}`;
-    const credit=calcInvoice({id,clientId:original.clientId,date:new Date().toISOString().slice(0,10),type:direction==='debit'?'debit':'credit',status:'issued',seriesId:sid,number,originalInvoiceId:original.id,originalInvoiceNumber:original.number,reason:String(reason||'').toUpperCase(),transportType:'fixed',transportValue:0,discount:0,lines:newLines,clientSnapshot:original.clientSnapshot});
-    tx.set(ref('invoices',id),{...credit,issuedAt:now(),updatedAt:now()});
-    tx.set(sref,{...s,next:next+1,updatedAt:now()},{merge:true});
-    tx.set(ref('invoices',original.id),{rectificationIds:[...(original.rectificationIds||[]),id],updatedAt:now()},{merge:true});
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'RECTIFICATION',entity:'invoices',entityId:id,originalId:original.id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});
-    return credit;
+    const sref=ref('series',sid);const ss=await tx.get(sref);const s=ss.exists()?ss.data():{prefix:sid,next:1,digits:5};const next=Number(s.next||1),number=`${s.prefix||sid}-R${String(next).padStart(Number(s.digits||5),'0')}`;
+    const credit=calcInvoice({id,clientId:original.clientId,date:new Date().toISOString().slice(0,10),type:direction==='debit'?'debit':'credit',status:'issued',seriesId:sid,number,originalInvoiceId:original.id,originalInvoiceNumber:original.number,reason:String(reason||'').toUpperCase(),transportType:'fixed',transportValue:0,discount:0,equivalenceSurcharge:Boolean(original.equivalenceSurcharge),lines:newLines,clientSnapshot:original.clientSnapshot});
+    tx.set(ref('invoices',id),{...credit,issuedAt:now(),updatedAt:now()});tx.set(sref,{...s,next:next+1,updatedAt:now()},{merge:true});tx.set(ref('invoices',original.id),{rectificationIds:[...(original.rectificationIds||[]),id],updatedAt:now()},{merge:true});const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'RECTIFICATION',entity:'invoices',entityId:id,originalId:original.id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});return credit;
   });
 }
 export async function forceMasterData(user){if(!isOwner(user))throw new Error('SOLO PROPIETARIO');await setDoc(ref('settings','main'),{masterVersion:'',updatedAt:now()},{merge:true});await ensureMasterData(user);}
