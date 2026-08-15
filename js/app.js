@@ -23,6 +23,7 @@ async function loadApplicationSource(){
 try{
   const source=await loadApplicationSource();
   new Function('Store','AW9',source)(Store,AW9);
+  await import('./iva-ui.js');
 }catch(error){
   console.error(error);
   document.body.innerHTML=`<main style="font-family:system-ui;padding:30px;max-width:700px;margin:auto"><h1>FACTUMADRID AW9</h1><p>No se pudo iniciar la aplicación.</p><pre style="white-space:pre-wrap">${String(error?.message||error)}</pre><button onclick="location.reload()">Reintentar</button></main>`;
