@@ -8,9 +8,10 @@ export const firebaseConfig = {
   measurementId: "G-768W72H2Q0"
 };
 
-export const AW9 = {
-  companyId: "aw9",
-  ownerUid: "o6rMhcEyUXUstmb7ptClXSv8ejQ2",
-  ownerEmail: "shaniwaris80@gmail.com",
-  sdkVersion: "12.16.0"
+export const ARW = {
+  appName: 'ARW2026',
+  companyId: 'arw2026',
+  ownerEmail: 'shaniwaris80@gmail.com',
+  ownerUid: 'o6rMhcEyUXUstmb7ptClXSv8ejQ2',
+  version: '2026.08.15.1'
 };
