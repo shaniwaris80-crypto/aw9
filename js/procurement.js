@@ -1,0 +1,11 @@
+import {st,product,table,actions,esc,n,num,money,upper,round2,stockForProduct,stockDisplay,summaryPdf} from './context.js';
+
+function requirements(){
+  const map=new Map();
+  const pending=st().orders.filter(o=>!['delivered','invoiced','cancelled'].includes(o.status));
+  for(const o of pending){for(const l of o.lines||[]){const p=product(l.productId);if(!p)continue;const input=n(l.requestedQty||l.qty);const stockQty=p.mode==='caja_kg'?round2(input*n(p.kgPerBox)):input;const x=map.get(p.id)||{product:p,orders:0,stockRequired:0};x.orders+=1;x.stockRequired=round2(x.stockRequired+stockQty);map.set(p.id,x)}}
+  return [...map.values()].map(x=>{const q=stockForProduct(st(),x.product.id),min=n(x.product.minStock);const buy=round2(Math.max(0,x.stockRequired+min-q.physical));return {...x,physical:q.physical,min,buy}}).sort((a,b)=>b.buy-a.buy);
+}
+function displayInput(p,stockQty){if(p.mode==='caja_kg'&&n(p.kgPerBox))return `${num(round2(stockQty/n(p.kgPerBox)))} CAJAS · ${num(stockQty)} KG`;return stockDisplay(p,stockQty)}
+export function procurementView(){const req=requirements();return `<div class="section-head"><div><h2>COMPRA / PREPARACIÓN / CARGA</h2><p>PEDIDOS + STOCK MÍNIMO − STOCK FÍSICO = COMPRA RECOMENDADA. NO CONFUNDE CAJAS CON KG.</p></div>${actions([['PDF LISTA DE COMPRA','procurementPdf','primary']])}</div>${table(['PRODUCTO','PEDIDO TOTAL','STOCK FÍSICO','STOCK MÍNIMO','COMPRAR','PEDIDOS'],req.map(x=>`<tr><td>${esc(x.product.name)}</td><td>${esc(displayInput(x.product,x.stockRequired))}</td><td>${esc(stockDisplay(x.product,x.physical))}</td><td>${esc(stockDisplay(x.product,x.min))}</td><td><b>${esc(displayInput(x.product,x.buy))}</b></td><td>${x.orders}</td></tr>`))}<section class="panel" style="margin-top:15px"><h3>REGLA DE CARGA</h3><p>LA CARGA SE BASA EN LO PREPARADO PARA LOS PEDIDOS. EL REPARTO REGISTRA DESPUÉS LO REALMENTE ENTREGADO, Y SOLO ESO LLEGA A FACTURA.</p></section>`}
+export function procurementPdf(){const req=requirements();summaryPdf('LISTA DE COMPRA ARW2026',['PRODUCTO','PEDIDO','STOCK','MÍNIMO','COMPRAR'],req.map(x=>[upper(x.product.name),displayInput(x.product,x.stockRequired),stockDisplay(x.product,x.physical),stockDisplay(x.product,x.min),displayInput(x.product,x.buy)]),'LISTA_COMPRA_ARW2026.pdf')}
