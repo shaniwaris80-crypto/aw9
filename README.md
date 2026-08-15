@@ -123,3 +123,5 @@ ARW2026 deja preparadas las opciones, pero no simula servicios inexistentes. El 
 Publicación desde `main` `/`:
 
 `https://shaniwaris80-crypto.github.io/aw9/`
+
+**BUILD FINAL ARW2026 v2 · 2026-08-15**
