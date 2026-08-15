@@ -8,7 +8,7 @@ const blank=()=>Object.fromEntries([['settings',{...defaultSettings}],...COLLECT
 let state=blank(),user=null,role='none',ready=false,online=false,lastError='';
 const listeners=new Set();
 const cacheKey='arw2026_cache_v1';
-function emit(){listeners.forEach(fn=>fn(state,{user,role,ready,online,lastError}))}
+function emit(){listeners.forEach(fn=>{try{fn(state,{user,role,ready,online,lastError})}catch(e){console.error('ARW LISTENER ERROR',e)}})}
 function cache(){try{localStorage.setItem(cacheKey,JSON.stringify(state))}catch{}}
 try{const c=JSON.parse(localStorage.getItem(cacheKey)||'null');if(c)state={...blank(),...c}}catch{}
 async function read(name){const s=await getDocs(col(name));return s.docs.map(d=>({id:d.id,...d.data()}))}
@@ -39,7 +39,26 @@ async function load(){
   }
   await seed();online=true;lastError='';cache();emit();
 }
-authApi.onChange(async u=>{
+
+// IMPORTANTE: Store se crea ANTES de registrar onAuthStateChanged.
+// Evita la zona temporal muerta (TDZ) que en Safari/iOS podía producir
+// "Cannot access 'Store' before initialization" durante el inicio de sesión.
+export const Store={
+  get state(){return state},
+  get user(){return user},
+  get role(){return role},
+  get ready(){return ready},
+  get online(){return online},
+  get lastError(){return lastError},
+  subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn)},
+  login:authApi.login,
+  loginGoogle:authApi.loginGoogle,
+  logout:authApi.logout,
+  save,remove,bulkSave,saveSettings,audit,load,uid,isoDate,
+  can(scope){if(['owner','admin','manager'].includes(role))return true;return role===scope}
+};
+
+async function handleAuthChange(u){
   user=u;ready=false;online=false;lastError='';
   if(!u){role='none';ready=true;emit();return}
   try{
@@ -53,5 +72,6 @@ authApi.onChange(async u=>{
     online=false;
   }
   ready=true;emit();
-});
-export const Store={get state(){return state},get user(){return user},get role(){return role},get ready(){return ready},get online(){return online},get lastError(){return lastError},subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn)},login:authApi.login,loginGoogle:authApi.loginGoogle,logout:authApi.logout,save,remove,bulkSave,saveSettings,audit,load,uid,isoDate,can(scope){if(['owner','admin','manager'].includes(role))return true;return role===scope}};
+}
+
+authApi.onChange(handleAuthChange);
