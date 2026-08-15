@@ -1,10 +1,10 @@
 import {ARW} from '../firebase-config.js';
 import {Runtime} from './runtime.js';
 import {authApi,ensureMasterData,subscribeCollections,saveEntity} from './firebase.js';
-import {today,upper} from './domain.js';
+import {today,upper,normalize} from './domain.js';
 import {toast} from './ui.js';
-import {dashboardView,ordersView,orderModal,invoiceFromOrder,invoicesView,invoiceModal,bulkDraftPrices,bulkIssuedPrices,rectificationModal,handleVoid,sendView,zipDay,paymentsView,paymentModal} from './views-sales.js';
-import {productsView,productModal,product360,clientsView,clientModal,client360,stockView,stockAdjustModal,suppliersView,supplierModal,purchasesView,purchaseModal,exportProducts,exportClients,exportStock} from './views-master.js';
+import {dashboardView,ordersView,orderModal,invoiceFromOrder,invoicesView,invoiceModal,pasteOrderInvoiceModal,bulkDraftPrices,bulkIssuedPrices,rectificationModal,handleVoid,sendView,zipDay,paymentsView,paymentModal} from './views-sales.js';
+import {productsView,productModal,product360,clientsView,clientModal,client360,stockView,stockAdjustModal,suppliersView,supplierModal,purchasesView,purchaseModal,purchaseImportModal,copyPurchasePrompt,exportProducts,exportClients,exportStock} from './views-master.js';
 import {reportsView,reportSales,reportPurchases,expensesView,expenseModal,priceManagerView,massPriceModal,routesView,routeModal,auditView,settingsView,masterReload} from './views-admin.js';
 import {warehouseOpsView,transferModal,wasteModal,returnModal,inventoryModal,documentsView,documentModal,convertDocument,closuresView,closeMonth} from './views-ops.js';
 import {downloadInvoice} from './pdf.js';
@@ -20,7 +20,14 @@ const NAV=[
 const VIEWS={dashboard:dashboardView,orders:ordersView,invoices:invoicesView,send:sendView,payments:paymentsView,clients:clientsView,products:productsView,stock:stockView,purchases:purchasesView,suppliers:suppliersView,operations:warehouseOpsView,documents:documentsView,routes:routesView,prices:priceManagerView,expenses:expensesView,reports:reportsView,closures:closuresView,audit:auditView,settings:settingsView};
 function navHtml(){return NAV.map(([id,ico,label])=>`<button class="nav-btn ${Runtime.view===id?'active':''}" data-view="${id}"><span>${ico}</span><span class="nav-label">${label}</span></button>`).join('')}
 function mobileNav(){const items=[['dashboard','🏠','INICIO'],['orders','🛒','PEDIDOS'],['invoices','🧾','FACTURAR'],['stock','📦','STOCK'],['settings','•••','MÁS']];return items.map(([id,ico,l])=>`<button data-view="${id}"><b>${ico}</b>${l}</button>`).join('')}
-function render(){if(!Runtime.user)return;nav.innerHTML=navHtml();document.querySelector('#mobileNav').innerHTML=mobileNav();const item=NAV.find(x=>x[0]===Runtime.view);viewTitle.textContent=item?.[2]||'ARW2026';try{content.innerHTML=(VIEWS[Runtime.view]||dashboardView)()}catch(e){console.error(e);content.innerHTML=`<div class="danger">ERROR DE PANTALLA: ${String(e.message||e)}</div>`}bindDynamic();}
+function render(){
+  if(!Runtime.user)return;
+  const active=document.activeElement,focusId=active?.id||'',start=typeof active?.selectionStart==='number'?active.selectionStart:null,end=typeof active?.selectionEnd==='number'?active.selectionEnd:null;
+  nav.innerHTML=navHtml();document.querySelector('#mobileNav').innerHTML=mobileNav();const item=NAV.find(x=>x[0]===Runtime.view);viewTitle.textContent=item?.[2]||'ARW2026';
+  try{content.innerHTML=(VIEWS[Runtime.view]||dashboardView)()}catch(e){console.error(e);content.innerHTML=`<div class="danger">ERROR DE PANTALLA: ${String(e.message||e)}</div>`}
+  bindDynamic();
+  if(focusId)requestAnimationFrame(()=>{const el=document.getElementById(focusId);if(el){el.focus();if(start!=null&&el.setSelectionRange)try{el.setSelectionRange(start,end??start)}catch{}}});
+}
 Runtime.render=render;
 function go(v){Runtime.view=v;document.querySelector('#app').classList.remove('side-open');render()}
 function stateError(name,e){console.error(name,e);cloud.innerHTML=`<span class="sync-bad">ERROR FIRESTORE · ${upper(e.code||e.message)}</span>`}
@@ -37,6 +44,9 @@ document.querySelector('#mobileMenu').onclick=()=>app.classList.add('side-open')
 document.body.addEventListener('click',e=>{const b=e.target.closest('[data-view]');if(b){go(b.dataset.view);return}const a=e.target.closest('[data-go]');if(a?.dataset.go==='invoice-new')invoiceModal()});
 
 function selectedInvoice(id){return Runtime.state.invoices.find(x=>x.id===id)}
+function bindTableSearch(input,key){
+  if(!input)return;const apply=()=>{window[key]=input.value;const q=normalize(input.value);content.querySelectorAll('.table-wrap tbody tr').forEach(tr=>{tr.hidden=Boolean(q)&&!normalize(tr.textContent).includes(q)})};input.oninput=apply;apply();
+}
 function bindDynamic(){
   content.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>action(b.dataset.action,b));
   content.querySelectorAll('[data-order-edit]').forEach(b=>b.onclick=()=>orderModal(stFind('orders',b.dataset.orderEdit)));
@@ -53,8 +63,7 @@ function bindDynamic(){
   content.querySelectorAll('[data-mass-product]').forEach(b=>b.onclick=()=>massPriceModal(b.dataset.massProduct));
   content.querySelectorAll('[data-doc-invoice]').forEach(b=>b.onclick=()=>{const [kind,id]=b.dataset.docInvoice.split(':');convertDocument(kind,id)});
   content.querySelectorAll('[data-wa]').forEach(b=>b.onclick=async()=>{const i=selectedInvoice(b.dataset.wa),c=Runtime.client(i.clientId)||i.clientSnapshot||{},phone=String(c.whatsapp||c.phone||'').replace(/\D/g,'');if(!phone)return toast('EL CLIENTE NO TIENE WHATSAPP','bad');const msg=`HOLA ${upper(c.name)}, ADJUNTAMOS SU FACTURA ${i.number} DEL ${i.date}. TOTAL ${calcTotal(i)}. GRACIAS.`;window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,'_blank');await saveEntity('invoices',{id:i.id,sentAt:new Date().toISOString()},'INVOICE_SENT',Runtime.user)});
-  const ps=content.querySelector('#productSearch');if(ps)ps.oninput=e=>{window.ARW_PRODUCT_Q=e.target.value;render()};
-  const cs=content.querySelector('#clientSearch');if(cs)cs.oninput=e=>{window.ARW_CLIENT_Q=e.target.value;render()};
+  bindTableSearch(content.querySelector('#productSearch'),'ARW_PRODUCT_Q');bindTableSearch(content.querySelector('#clientSearch'),'ARW_CLIENT_Q');
   const sd=content.querySelector('#sendDate');if(sd)sd.onchange=e=>{window.ARW_SEND_DATE=e.target.value;render()};
   const rm=content.querySelector('#reportMonth');if(rm)rm.onchange=e=>{window.ARW_REPORT_MONTH=e.target.value;render()};
   const cm=content.querySelector('#closeMonth');if(cm)cm.onchange=e=>{window.ARW_CLOSE_MONTH=e.target.value;render()};
@@ -62,11 +71,11 @@ function bindDynamic(){
 function stFind(name,id){return Runtime.state[name].find(x=>x.id===id)}
 function calcTotal(i){return new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(Number(i.total||0)||Runtime.state.invoices.find(x=>x.id===i.id)?.total||0)}
 async function action(name){switch(name){
-  case'invoice-new':return invoiceModal();case'order-new':return orderModal();case'bulk-drafts':return bulkDraftPrices();case'bulk-issued':return bulkIssuedPrices();case'zip-day':return zipDay();case'payment-new':return paymentModal();
-  case'product-new':return productModal();case'client-new':return clientModal();case'stock-adjust':return stockAdjustModal();case'supplier-new':return supplierModal();case'purchase-new':return purchaseModal();
+  case'invoice-new':return invoiceModal();case'order-new':return orderModal();case'paste-order':return pasteOrderInvoiceModal();case'bulk-drafts':return bulkDraftPrices();case'bulk-issued':return bulkIssuedPrices();case'zip-day':return zipDay();case'payment-new':return paymentModal();
+  case'product-new':return productModal();case'client-new':return clientModal();case'stock-adjust':return stockAdjustModal();case'supplier-new':return supplierModal();case'purchase-new':return purchaseModal();case'purchase-import':return purchaseImportModal();case'purchase-prompt':return copyPurchasePrompt();
   case'products-export':return exportProducts();case'clients-export':return exportClients();case'stock-export':return exportStock();case'expense-new':return expenseModal();case'price-mass':return massPriceModal();case'route-new':return routeModal();
   case'report-sales':return reportSales();case'report-purchases':return reportPurchases();case'master-reload':return masterReload();case'transfer-new':return transferModal();case'waste-new':return wasteModal();case'return-new':return returnModal();case'inventory-new':return inventoryModal();
   case'doc-quote':return documentModal('quote');case'doc-proforma':return documentModal('proforma');case'doc-delivery':return documentModal('delivery');case'close-month':return closeMonth();
 }}
 
-if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn));
+if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js',{updateViaCache:'none'}).then(r=>r.update()).catch(console.warn));
