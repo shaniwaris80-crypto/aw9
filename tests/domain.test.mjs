@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {calcLine,calcInvoice,normalizedKgPerBox} from '../js/domain.js';
+const mad=calcLine({productId:'p_MM',name:'MACHO MADURO',mode:'caja_kg',qty:2,kgPerBox:22,price:1.70,vat:4});
+assert.equal(mad.net,44);assert.equal(mad.base,74.80);assert.equal(mad.vatAmount,2.99);assert.equal(mad.total,77.79);
+const verde=calcLine({productId:'p_MV',name:'MACHO VERDE',mode:'caja_kg',qty:3,kgPerBox:22,price:1.25,vat:4});
+assert.equal(verde.net,66);assert.equal(verde.base,82.50);
+const banana=calcLine({productId:'p_BN',name:'BANANA',mode:'caja_kg',qty:2,kgPerBox:18.5,price:1.25,vat:4});
+assert.equal(banana.net,37);assert.equal(banana.base,46.25);
+assert.equal(normalizedKgPerBox({kgBox:18}),18);assert.equal(normalizedKgPerBox({pesoCaja:10}),10);
+const inv=calcInvoice({transportType:'percent',transportValue:10,discount:0,lines:[mad]});
+assert.equal(inv.productBase,74.80);assert.equal(inv.transport,7.48);assert.equal(inv.base,82.28);assert.equal(inv.vatTotal,3.29);assert.equal(inv.total,85.57);
+console.log('ARW2026 DOMAIN TESTS OK');
