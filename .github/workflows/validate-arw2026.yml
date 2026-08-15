@@ -1,0 +1,67 @@
+name: Validar ARW2026
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Comprobar sintaxis JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            echo "Comprobando $file"
+            node --check "$file"
+          done < <(find js -type f -name '*.js' -print0)
+          node --check firebase-config.js
+          node --check service-worker.js
+
+      - name: Comprobar imports locales
+        shell: python
+        run: |
+          import pathlib, re, sys
+          root = pathlib.Path('.')
+          missing = []
+          files = list((root / 'js').glob('*.js')) + [root / 'firebase-config.js']
+          rx = re.compile(r"(?:from\s+|import\s*)['\"](\.{1,2}/[^'\"]+)['\"]")
+          for file in files:
+              text = file.read_text(encoding='utf-8')
+              for rel in rx.findall(text):
+                  target = (file.parent / rel).resolve()
+                  try:
+                      target.relative_to(root.resolve())
+                  except ValueError:
+                      continue
+                  if not target.exists():
+                      missing.append(f'{file}: {rel} -> {target}')
+          if missing:
+              print('IMPORTS LOCALES QUE NO EXISTEN:')
+              print('\n'.join(missing))
+              sys.exit(1)
+          print('Todos los imports locales existen.')
+
+      - name: Comprobar archivos PWA esenciales
+        shell: bash
+        run: |
+          test -f index.html
+          test -f manifest.webmanifest
+          test -f service-worker.js
+          test -f firestore.rules
+          test -f storage.rules
+          test -f .nojekyll
+          echo "Estructura ARW2026 correcta."
