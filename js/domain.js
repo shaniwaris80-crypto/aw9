@@ -19,6 +19,13 @@ export function clientPrice(client,product){
   if(entry==null)return {price:Number(product.sellPrice||0),source:'GENERAL'};
   return {price:Number(typeof entry==='number'?entry:entry.price||0),source:'CLIENTE'};
 }
+export function equivalenceRateForVat(vat){
+  const rate=Number(vat||0);
+  if(rate===4)return .5;
+  if(rate===10)return 1.4;
+  if(rate===21)return 5.2;
+  return 0;
+}
 export function newLine(product,client=null,overrides={}){
   const p=normalizeProduct(product);const cp=clientPrice(client,p);
   return calcLine({
@@ -59,20 +66,25 @@ export function calcInvoice(invoice={}){
   const transport=invoice.transportType==='fixed'?round2(Number(invoice.transportValue||0)):round2((productBase-globalDiscount)*Number(invoice.transportValue||0)/100);
   const after=round2(productBase-globalDiscount+transport);
   const factor=productBase?after/productBase:0;
+  const useRE=Boolean(invoice.equivalenceSurcharge);
   const vats={};
   for(const l of lines){
-    const rate=Number(l.vat||0);vats[rate]??={rate,base:0,vat:0};
+    const rate=Number(l.vat||0);vats[rate]??={rate,base:0,vat:0,reRate:useRE?equivalenceRateForVat(rate):0,re:0};
     const b=round2(l.base*factor);vats[rate].base=round2(vats[rate].base+b);vats[rate].vat=round2(vats[rate].vat+b*rate/100);
+    if(useRE)vats[rate].re=round2(vats[rate].re+b*vats[rate].reRate/100);
   }
   const sign=invoice.type==='credit'?-1:1;
-  const vatBreakdown=Object.values(vats).sort((a,b)=>a.rate-b.rate).map(v=>({rate:v.rate,base:round2(v.base*sign),vat:round2(v.vat*sign)}));
+  const vatBreakdown=Object.values(vats).sort((a,b)=>a.rate-b.rate).map(v=>({
+    rate:v.rate,base:round2(v.base*sign),vat:round2(v.vat*sign),reRate:v.reRate,re:round2(v.re*sign)
+  }));
   if(sign<0)lines=lines.map(l=>({...l,base:-Math.abs(l.base),vatAmount:-Math.abs(l.vatAmount),total:-Math.abs(l.total)}));
   const base=round2(vatBreakdown.reduce((s,v)=>s+v.base,0));
   const vatTotal=round2(vatBreakdown.reduce((s,v)=>s+v.vat,0));
-  const total=round2(base+vatTotal);
+  const equivalenceTotal=round2(vatBreakdown.reduce((s,v)=>s+Number(v.re||0),0));
+  const total=round2(base+vatTotal+equivalenceTotal);
   const paid=sign<0?0:round2(Number(invoice.paid||0));
   const pending=sign<0?total:round2(Math.max(0,total-paid));
-  return {...invoice,lines,productBase:round2(productBase*sign),globalDiscount:round2(globalDiscount*sign),transport:round2(transport*sign),vatBreakdown,base,vatTotal,total,paid,pending};
+  return {...invoice,lines,productBase:round2(productBase*sign),globalDiscount:round2(globalDiscount*sign),transport:round2(transport*sign),vatBreakdown,base,vatTotal,equivalenceTotal,total,paid,pending};
 }
 export function lineDescription(l){
   const x=calcLine(l);
@@ -92,6 +104,7 @@ export function validateInvoice(invoice,products=[],clients=[]){
     if(![0,4,10,21].includes(Number(l.vat)))warnings.push(`${l.name||l.code}: REVISAR IVA ${l.vat}%`);
     if(Number(l.buyPriceSnapshot)>0&&Number(l.price)<Number(l.buyPriceSnapshot))warnings.push(`${l.name||l.code}: PRECIO BAJO COSTE`);
   }
+  if(invoice.equivalenceSurcharge&&x.vatBreakdown.some(v=>![0,4,10,21].includes(Number(v.rate))))warnings.push('REVISAR RECARGO DE EQUIVALENCIA PARA TIPOS DE IVA NO ESTÁNDAR');
   return {errors,warnings,invoice:x};
 }
 export function stockQuantity(moves=[],productId,location='ALL'){
