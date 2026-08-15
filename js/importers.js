@@ -10,19 +10,24 @@ export function parseNumber(value){
   const n=Number(s);return Number.isFinite(n)?n:0;
 }
 
-function aliases(p){return [p.code,p.name,...String(p.aliases||'').split(',')].map(x=>normalize(x)).filter(Boolean)}
+function namesAndAliases(p){return [p.name,...String(p.aliases||'').split(',')].map(x=>normalize(x)).filter(Boolean)}
 export function matchProduct(text,products=[]){
   const q=normalize(text);if(!q)return null;
-  const exactCode=products.find(p=>normalize(p.code)===q);if(exactCode)return exactCode;
-  const exact=products.find(p=>aliases(p).includes(q));if(exact)return exact;
+  const tokens=q.split(' ').filter(Boolean);
+  // Los códigos cortos (MM, MA, etc.) solo se aceptan como palabra completa,
+  // nunca como subcadena de MACHO/MANGO/MAMEY.
+  const codeHit=products.find(p=>tokens.includes(normalize(p.code)));if(codeHit)return codeHit;
+  const exact=products.find(p=>namesAndAliases(p).includes(q));if(exact)return exact;
   let best=null,bestScore=0;
+  const padded=` ${q} `;
   for(const p of products){
-    for(const a of aliases(p)){
-      if(a.length<2)continue;
-      if((` ${q} `).includes(` ${a} `)||q.includes(a)){
-        const score=a.length+(normalize(p.code)===a?20:0);
-        if(score>bestScore){best=p;bestScore=score;}
-      }
+    const primary=normalize(p.name);
+    for(const a of namesAndAliases(p)){
+      if(a.length<3)continue;
+      const whole=padded.includes(` ${a} `)||q.startsWith(`${a} `)||q.endsWith(` ${a}`);
+      if(!whole)continue;
+      const score=a.length+(a===primary?30:10);
+      if(score>bestScore){best=p;bestScore=score;}
     }
   }
   return best;
