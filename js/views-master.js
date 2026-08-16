@@ -12,6 +12,7 @@ import {
   parsePurchaseText, purchaseCalculatedTotals, chatGptPurchaseInstruction
 } from './importers.js';
 import {invoiceAfterReset, resetLabel} from './period.js';
+import {can} from './permissions.js';
 
 const st = () => Runtime.state;
 const product = id => Runtime.product(id);
@@ -38,6 +39,7 @@ const supplierOpts = (sel = '') =>
 export function productsView() {
   const q = window.ARW_PRODUCT_Q || '';
   const list = products();
+  const editable = can(Runtime.role,'productWrite');
   const dupeNames = new Map();
 
   for (const p of list) {
@@ -69,7 +71,7 @@ export function productsView() {
       <td>${esc(p.supplier || '')}</td>
       <td>${state}</td>
       <td>
-        <button class="btn mini" data-product-edit="${p.id}">EDITAR</button>
+        ${editable?`<button class="btn mini" data-product-edit="${p.id}">EDITAR</button>`:''}
         <button class="btn mini" data-product-360="${p.id}">360º</button>
       </td>
     </tr>`;
@@ -78,7 +80,7 @@ export function productsView() {
   return `${section(
     'PRODUCTOS',
     'CATÁLOGO MAESTRO · MODO · KG/CAJA · COMPRA · VENTA · RECOMENDADO · IVA',
-    '<button class="btn primary" data-action="product-new">＋ PRODUCTO</button><button class="btn" data-action="products-export">EXPORTAR EXCEL</button>'
+    `${editable?'<button class="btn primary" data-action="product-new">＋ PRODUCTO</button>':''}<button class="btn" data-action="products-export">EXPORTAR EXCEL</button>`
   )}
   <div class="panel">
     <input id="productSearch" placeholder="BUSCAR CÓDIGO, PRODUCTO O ALIAS" value="${esc(q)}" autocomplete="off">
@@ -90,6 +92,7 @@ export function productsView() {
 }
 
 export function productModal(existing = null) {
+  if(!can(Runtime.role,'productWrite'))return toast('TU ROL SOLO PUEDE CONSULTAR PRODUCTOS','bad');
   const p = existing
     ? structuredClone(existing)
     : {
@@ -186,6 +189,7 @@ function clientStats(c, period = true) {
 export function clientsView() {
   const q = window.ARW_CLIENT_Q || '';
   const list = clients();
+  const editable = can(Runtime.role,'clientWrite');
 
   const rows = list.map(c => {
     const s = clientStats(c, true);
@@ -198,7 +202,7 @@ export function clientsView() {
       <td>${money(s.billed)}</td>
       <td>${money(s.pending)}</td>
       <td>
-        <button class="btn mini" data-client-edit="${c.id}">EDITAR</button>
+        ${editable?`<button class="btn mini" data-client-edit="${c.id}">EDITAR</button>`:''}
         <button class="btn mini primary" data-client-360="${c.id}">360º</button>
       </td>
     </tr>`;
@@ -207,7 +211,7 @@ export function clientsView() {
   return `${section(
     'CLIENTES 360º',
     `PERIODO DESDE ${resetLabel()} · HISTÓRICO COMPLETO DENTRO DE CADA CLIENTE`,
-    '<button class="btn primary" data-action="client-new">＋ CLIENTE</button><button class="btn" data-action="clients-export">EXPORTAR EXCEL</button>'
+    `${editable?'<button class="btn primary" data-action="client-new">＋ CLIENTE</button>':''}<button class="btn" data-action="clients-export">EXPORTAR EXCEL</button>`
   )}
   <div class="panel">
     <input id="clientSearch" placeholder="BUSCAR CLIENTE, NIF O DIRECCIÓN" value="${esc(q)}" autocomplete="off">
@@ -219,6 +223,7 @@ export function clientsView() {
 }
 
 export function clientModal(existing = null) {
+  if(!can(Runtime.role,'clientWrite'))return toast('TU ROL SOLO PUEDE CONSULTAR CLIENTES','bad');
   const c = existing
     ? structuredClone(existing)
     : {
@@ -291,6 +296,7 @@ export function clientModal(existing = null) {
 }
 
 export function client360(c) {
+  const canEditClient=can(Runtime.role,'clientWrite');
   const period = clientStats(c, true);
   const history = clientStats(c, false);
   const invs = (st().invoices || [])
@@ -348,7 +354,7 @@ export function client360(c) {
   const priceRows = Object.entries(c.prices || {}).map(([pid, v]) => `<tr>
     <td>${esc(product(pid)?.name || pid)}</td>
     <td>${money(typeof v === 'number' ? v : v.price)}</td>
-    <td><button class="btn mini" data-price-edit="${pid}">EDITAR</button></td>
+    <td>${canEditClient?`<button class="btn mini" data-price-edit="${pid}">EDITAR</button>`:'—'}</td>
   </tr>`);
 
   const creditWarning = Number(c.creditLimit || 0) > 0 && history.pending > Number(c.creditLimit)
@@ -367,7 +373,7 @@ export function client360(c) {
     ${creditWarning}
     <div class="actions">
       <button class="btn" id="statement">ESTADO DE CUENTA PDF</button>
-      <button class="btn primary" id="newSpecial">＋ PRECIO ESPECIAL</button>
+      ${canEditClient?'<button class="btn primary" id="newSpecial">＋ PRECIO ESPECIAL</button>':''}
     </div><br>
     <div class="grid2">
       <div>
@@ -388,13 +394,14 @@ export function client360(c) {
   );
 
   m.querySelector('#statement').onclick = () => clientStatement(c);
-  m.querySelector('#newSpecial').onclick = () => specialPriceModal(c);
+  if(m.querySelector('#newSpecial'))m.querySelector('#newSpecial').onclick = () => specialPriceModal(c);
   m.querySelectorAll('[data-price-edit]').forEach(b => {
     b.onclick = () => specialPriceModal(c, b.dataset.priceEdit);
   });
 }
 
 function specialPriceModal(c, pid = '') {
+  if(!can(Runtime.role,'clientWrite'))return toast('TU ROL NO PUEDE CAMBIAR TARIFAS','bad');
   const current = pid
     ? (c.prices?.[pid]?.price ?? c.prices?.[pid] ?? product(pid)?.sellPrice ?? 0)
     : 0;
@@ -457,6 +464,7 @@ function specialPriceModal(c, pid = '') {
 }
 
 export function stockAdjustModal() {
+  if(!can(Runtime.role,'stockAdjust'))return toast('SIN PERMISO PARA AJUSTAR STOCK','bad');
   const m = modal(
     'AJUSTE DE STOCK',
     `<form id="sa">
@@ -552,6 +560,7 @@ export function suppliersView() {
 }
 
 export function supplierModal(existing = null) {
+  if(!can(Runtime.role,'supplierWrite'))return toast('SIN PERMISO PARA EDITAR PROVEEDORES','bad');
   const s = existing || {
     id: uid('s'), name: '', nif: '', address: '', phone: '', email: '', dueDays: 0, active: true
   };
@@ -603,7 +612,7 @@ function purchaseLineRow(l = {}) {
   const unknown = Boolean(l.vatUnknown);
   return `<tr>
     <td><select class="puProd">${productOpts(l.productId)}</select></td>
-    <td><input class="puQty" type="number" step=".01" value="${Number(l.qty || 0)}"></td>
+    <td><input class="puQty" type="number" step="${String(l.mode||'').startsWith('caja')?'1':'.01'}" value="${Number(l.qty || 0)}"></td>
     <td><input class="puKg" type="number" step=".01" value="${Number(l.kgPerBox || 0)}"></td>
     <td><input class="puPrice" type="number" step=".01" value="${Number(l.price || 0)}"></td>
     <td>
@@ -646,6 +655,7 @@ export function purchasesView() {
 }
 
 export function purchaseModal(preset = null) {
+  if(!can(Runtime.role,'purchaseWrite'))return toast('SIN PERMISO PARA REGISTRAR COMPRAS','bad');
   const seed = preset || {};
   const seedLines = (seed.lines || []).map(l => ({...l}));
   while (seedLines.length < 5) seedLines.push({});
@@ -741,6 +751,7 @@ export function purchaseModal(preset = null) {
       const p = product(e.target.value);
       const tr = e.target.closest('tr');
       tr.querySelector('.puKg').value = Number(p?.kgPerBox || 0);
+      tr.querySelector('.puQty').step=p?.mode?.startsWith('caja')?'1':'.01';
       tr.querySelector('.puPrice').value = Number(p?.buyPrice || 0);
       tr.querySelector('.puPriceType').value = p?.mode === 'caja_kg'
         ? 'KG'
@@ -829,6 +840,7 @@ export function purchaseModal(preset = null) {
 }
 
 export function purchaseImportModal() {
+  if(!can(Runtime.role,'purchaseWrite'))return toast('SIN PERMISO PARA IMPORTAR COMPRAS','bad');
   const m = modal(
     'PEGAR COMPRA DESDE CHATGPT',
     `<div class="grid2">

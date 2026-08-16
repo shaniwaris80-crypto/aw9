@@ -13,5 +13,5 @@ export const ARW = {
   companyPath: "companies/arw2026",
   ownerEmail: "shaniwaris80@gmail.com",
   ownerUid: "o6rMhcEyUXUstmb7ptClXSv8ejQ2",
-  version: "4.0.0"
+  version: "6.0.0"
 };
