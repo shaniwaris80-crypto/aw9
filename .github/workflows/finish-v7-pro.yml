@@ -1,0 +1,31 @@
+name: Finalizar ARW2026 PRO V7
+on:
+  push:
+    branches: [arw2026-pro-v7-work]
+    paths: ['tools/finish_v7_pro.py','.github/workflows/finish-v7-pro.yml']
+permissions:
+  contents: write
+jobs:
+  finish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: arw2026-pro-v7-work}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: python3 tools/finish_v7_pro.py
+      - name: Validación rápida antes de commit
+        run: |
+          find js -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check functions/index.js
+          node tests/domain.test.mjs
+          node tests/finance.test.mjs
+          node tests/audit.test.mjs
+          node tests/verifactu.test.mjs
+      - name: Commit integración
+        run: |
+          git config user.name 'shaniwaris80-crypto'
+          git config user.email 'shaniwaris80@gmail.com'
+          git add js service-worker.js README.md
+          git commit -m 'ARW2026 PRO v7: integración final segura' || exit 0
+          git push origin HEAD:arw2026-pro-v7-work
