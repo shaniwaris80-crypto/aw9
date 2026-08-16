@@ -1,0 +1,28 @@
+name: Cierre profesional ARW2026 V7
+on:
+  push:
+    branches: [arw2026-pro-v7-work]
+    paths: ['tools/v7_professional_close.py','.github/workflows/v7-professional-close.yml']
+permissions: {contents: write}
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: arw2026-pro-v7-work}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: python3 tools/v7_professional_close.py
+      - run: |
+          find js -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check functions/index.js
+          node tests/domain.test.mjs
+          node tests/finance.test.mjs
+          node tests/audit.test.mjs
+          node tests/verifactu.test.mjs
+      - run: |
+          git config user.name 'shaniwaris80-crypto'
+          git config user.email 'shaniwaris80@gmail.com'
+          git add js docs
+          git commit -m 'ARW2026 PRO v7: cierre profesional documentos y fiscalidad' || exit 0
+          git push origin HEAD:arw2026-pro-v7-work
