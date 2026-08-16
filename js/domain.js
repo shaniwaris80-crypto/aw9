@@ -3,118 +3,17 @@ export const upper=v=>String(v??'').trim().toUpperCase();
 export const normalize=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 export const uid=(prefix='id')=>`${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
 export const now=()=>new Date().toISOString();
-export function localDate(d=new Date()){
-  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-}
+export function localDate(d=new Date()){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`}
 export const today=()=>localDate();
-
-export function normalizedKgPerBox(x={}){
-  return Number(x.kgPerBox??x.kgBox??x.pesoCaja??0)||0;
-}
-
-export function priceForClient(product,client){
-  if(!product)return 0;
-  const v=client?.prices?.[product.id];
-  if(v!=null)return Number(typeof v==='number'?v:v.price)||0;
-  return Number(product.sellPrice||0);
-}
-
-export function newLine(product,client,overrides={}){
-  if(!product)return {...overrides};
-  return {
-    id:overrides.id||uid('line'),productId:product.id,code:product.code,name:product.name,mode:product.mode,
-    qty:0,kgPerBox:normalizedKgPerBox(product),gross:0,tare:0,price:priceForClient(product,client),vat:Number(product.vat||0),discount:0,
-    ...overrides
-  };
-}
-
-export function calcLine(raw={}){
-  const mode=raw.mode||'kg',qty=Number(raw.qty||0),kgPerBox=normalizedKgPerBox(raw),gross=Number(raw.gross||0),tare=Number(raw.tare||0),price=Number(raw.price||0),vat=Number(raw.vat||0),discount=Number(raw.discount||0);
-  let net=qty;
-  if(mode==='caja_kg')net=gross>0?Math.max(0,round2(gross-tare)):round2(qty*kgPerBox);
-  else if(mode==='kg')net=gross>0?Math.max(0,round2(gross-tare)):qty;
-  else if(mode==='caja_fija'||mode==='ud'||mode==='manojo')net=qty;
-  const billedQty=net;
-  const grossBase=round2(billedQty*price),lineDiscount=round2(grossBase*discount/100),base=round2(grossBase-lineDiscount),vatAmount=round2(base*vat/100),total=round2(base+vatAmount);
-  return {...raw,mode,qty,kgPerBox,gross,tare,net,billedQty,price,vat,discount,grossBase,lineDiscount,base,vatAmount,total};
-}
-
+export function normalizedKgPerBox(x={}){return Number(x.kgPerBox??x.kgBox??x.pesoCaja??0)||0}
+export function priceForClient(product,client){if(!product)return 0;const v=client?.prices?.[product.id];if(v!=null)return Number(typeof v==='number'?v:v.price)||0;return Number(product.sellPrice||0)}
+export function newLine(product,client,overrides={}){if(!product)return {...overrides};return{id:overrides.id||uid('line'),productId:product.id,code:product.code,name:product.name,mode:product.mode,qty:0,kgPerBox:normalizedKgPerBox(product),gross:0,tare:0,price:priceForClient(product,client),vat:Number(product.vat||0),discount:0,...overrides}}
+export function calcLine(raw={}){const mode=raw.mode||'kg',qty=Number(raw.qty||0),kgPerBox=normalizedKgPerBox(raw),gross=Number(raw.gross||0),tare=Number(raw.tare||0),price=Number(raw.price||0),vat=Number(raw.vat||0),discount=Number(raw.discount||0);let net=qty;if(mode==='caja_kg')net=gross>0?Math.max(0,round2(gross-tare)):round2(qty*kgPerBox);else if(mode==='kg')net=gross>0?Math.max(0,round2(gross-tare)):qty;else if(mode==='caja_fija'||mode==='ud'||mode==='manojo')net=qty;const billedQty=net,grossBase=round2(billedQty*price),lineDiscount=round2(grossBase*discount/100),base=round2(grossBase-lineDiscount),vatAmount=round2(base*vat/100),total=round2(base+vatAmount);return{...raw,mode,qty,kgPerBox,gross,tare,net,billedQty,price,vat,discount,grossBase,lineDiscount,base,vatAmount,total}}
 const RE_RATES={0:0,4:0.5,10:1.4,21:5.2};
-export function calcInvoice(raw={}){
-  const sign=raw.type==='credit'?-1:1;
-  const lines=(raw.lines||[]).filter(l=>l&&l.productId&&Number(l.qty||0)>0).map(calcLine);
-  const productBase=round2(lines.reduce((s,l)=>s+l.base,0));
-  const globalDiscount=round2(productBase*Math.max(0,Number(raw.discount||0))/100);
-  const netMerchandise=round2(productBase-globalDiscount);
-  const transport=raw.transportType==='percent'?round2(netMerchandise*Number(raw.transportValue||0)/100):round2(Number(raw.transportValue||0));
-  const taxableTotal=round2(netMerchandise+transport);
-  const byRate=new Map();
-  for(const l of lines){const r=Number(l.vat||0),v=byRate.get(r)||{rate:r,lineBase:0};v.lineBase=round2(v.lineBase+l.base);byRate.set(r,v)}
-  const rates=[...byRate.values()];
-  let allocated=0;
-  const vatBreakdown=rates.map((v,idx)=>{
-    const share=productBase>0?v.lineBase/productBase:0;
-    let base;
-    if(idx===rates.length-1)base=round2(taxableTotal-allocated);
-    else {base=round2(taxableTotal*share);allocated=round2(allocated+base)}
-    const vat=round2(base*v.rate/100),reRate=raw.equivalenceSurcharge?Number(RE_RATES[v.rate]||0):0,re=round2(base*reRate/100);
-    return {rate:v.rate,base,vat,reRate,re};
-  });
-  const base=round2(vatBreakdown.reduce((s,v)=>s+v.base,0)),vatTotal=round2(vatBreakdown.reduce((s,v)=>s+v.vat,0)),equivalenceTotal=round2(vatBreakdown.reduce((s,v)=>s+v.re,0));
-  const unsignedTotal=round2(base+vatTotal+equivalenceTotal),paid=Math.max(0,Number(raw.paid||0)),total=round2(unsignedTotal*sign),pending=sign<0?round2(total+paid):round2(Math.max(0,total-paid));
-  return {...raw,lines,productBase,globalDiscount,netMerchandise,transport,base,vatBreakdown,vatTotal,equivalenceTotal,total,paid,pending};
-}
-
-export function validateInvoice(raw={},opts={}){
-  const errors=[],warnings=[],x=calcInvoice(raw);
-  if(!raw.clientId&&!raw.clientSnapshot?.name)errors.push('CLIENTE OBLIGATORIO');
-  if(!x.lines.length)errors.push('AÑADE AL MENOS UN PRODUCTO');
-  x.lines.forEach((l,i)=>{
-    const n=i+1;
-    if(Number(l.qty||0)<=0)errors.push(`LÍNEA ${n}: CANTIDAD INVÁLIDA`);
-    if(l.mode==='caja_kg'&&Number(l.kgPerBox||0)<=0)errors.push(`LÍNEA ${n}: KG/CAJA OBLIGATORIO`);
-    if((l.mode==='caja_kg'||l.mode==='caja_fija')&&!Number.isInteger(Number(l.qty))&&!opts.allowFractionalBoxes)warnings.push(`LÍNEA ${n}: CANTIDAD DE CAJAS NO ENTERA`);
-    if(Number(l.price||0)<=0)errors.push(`LÍNEA ${n}: PRECIO DEBE SER MAYOR QUE 0`);
-    if(![0,4,10,21].includes(Number(l.vat)))warnings.push(`LÍNEA ${n}: IVA ${l.vat}% NO ESTÁ ENTRE LOS TIPOS CONFIGURADOS`);
-  });
-  if(Number(raw.discount||0)<0||Number(raw.discount||0)>100)errors.push('DESCUENTO GENERAL INVÁLIDO');
-  if(Number(raw.transportValue||0)<0)errors.push('TRANSPORTE NO PUEDE SER NEGATIVO');
-  if(x.total<=0&&raw.type!=='credit')errors.push('TOTAL DE FACTURA DEBE SER MAYOR QUE 0');
-  if(Number(raw.paid||0)>Math.max(0,x.total)+0.01)errors.push('PAGADO NO PUEDE SUPERAR EL TOTAL');
-  return {errors,warnings,invoice:x};
-}
-
-export function invoiceStatus(raw={}){
-  if(raw.status==='void')return 'ANULADA';
-  if(raw.status==='draft')return 'BORRADOR';
-  const x=calcInvoice(raw);
-  if(x.pending<=0)return 'PAGADA';
-  if(x.paid>0)return 'PARCIAL';
-  if(raw.dueDate&&raw.dueDate<today())return 'VENCIDA';
-  return 'PENDIENTE';
-}
-
-export function lineDescription(raw={}){
-  const l=calcLine(raw);
-  if(l.mode==='caja_kg')return `${l.qty} CAJAS × ${l.kgPerBox} KG = ${l.net} KG`;
-  if(l.mode==='caja_fija')return `${l.qty} CAJAS`;
-  if(l.mode==='manojo')return `${l.qty} MANOJOS`;
-  if(l.mode==='ud')return `${l.qty} UD`;
-  return `${l.net} KG`;
-}
-
-export function stockMovementQty(raw={}){
-  const l=calcLine(raw);
-  if(l.mode==='caja_kg'||l.mode==='kg')return round2(l.net);
-  return round2(l.qty);
-}
-export function stockQuantity(moves=[],productId,location=null){
-  return round2((moves||[]).filter(m=>m.productId===productId&&(!location||m.location===location)).reduce((s,m)=>s+Number(m.qty||0),0));
-}
-export function stockText(product,qty){
-  qty=round2(qty);
-  if(product?.mode==='caja_kg'&&normalizedKgPerBox(product)>0)return `${round2(qty/normalizedKgPerBox(product))} CAJAS · ${qty} KG`;
-  const u=product?.mode==='caja_fija'?'CAJAS':product?.mode==='manojo'?'MANOJOS':product?.mode==='ud'?'UD':'KG';
-  return `${qty} ${u}`;
-}
+export function calcInvoice(raw={}){const sign=raw.type==='credit'?-1:1,lines=(raw.lines||[]).filter(l=>l&&l.productId&&Number(l.qty||0)>0).map(calcLine),productBase=round2(lines.reduce((s,l)=>s+l.base,0)),globalDiscount=round2(productBase*Math.max(0,Number(raw.discount||0))/100),netMerchandise=round2(productBase-globalDiscount),transport=raw.transportType==='percent'?round2(netMerchandise*Number(raw.transportValue||0)/100):round2(Number(raw.transportValue||0)),taxableTotal=round2(netMerchandise+transport),byRate=new Map();for(const l of lines){const r=Number(l.vat||0),v=byRate.get(r)||{rate:r,lineBase:0};v.lineBase=round2(v.lineBase+l.base);byRate.set(r,v)}const rates=[...byRate.values()];let allocated=0;const vatBreakdown=rates.map((v,idx)=>{const share=productBase>0?v.lineBase/productBase:0;let base;if(idx===rates.length-1)base=round2(taxableTotal-allocated);else{base=round2(taxableTotal*share);allocated=round2(allocated+base)}const vat=round2(base*v.rate/100),reRate=raw.equivalenceSurcharge?Number(RE_RATES[v.rate]||0):0,re=round2(base*reRate/100);return{rate:v.rate,base,vat,reRate,re}}),base=round2(vatBreakdown.reduce((s,v)=>s+v.base,0)),vatTotal=round2(vatBreakdown.reduce((s,v)=>s+v.vat,0)),equivalenceTotal=round2(vatBreakdown.reduce((s,v)=>s+v.re,0)),unsignedTotal=round2(base+vatTotal+equivalenceTotal),paid=Math.max(0,Number(raw.paid||0)),total=round2(unsignedTotal*sign),pending=sign<0?round2(total+paid):round2(Math.max(0,total-paid));return{...raw,lines,productBase,globalDiscount,netMerchandise,transport,base,vatBreakdown,vatTotal,equivalenceTotal,total,paid,pending}}
+export function validateInvoice(raw={},opts={}){const errors=[],warnings=[],x=calcInvoice(raw);if(!raw.clientId&&!raw.clientSnapshot?.name)errors.push('CLIENTE OBLIGATORIO');if(!x.lines.length)errors.push('AÑADE AL MENOS UN PRODUCTO');x.lines.forEach((l,i)=>{const n=i+1;if(Number(l.qty||0)<=0)errors.push(`LÍNEA ${n}: CANTIDAD INVÁLIDA`);if(l.mode==='caja_kg'&&Number(l.kgPerBox||0)<=0)errors.push(`LÍNEA ${n}: KG/CAJA OBLIGATORIO`);if((l.mode==='caja_kg'||l.mode==='caja_fija')&&!Number.isInteger(Number(l.qty))&&!opts.allowFractionalBoxes)errors.push(`LÍNEA ${n}: LAS CAJAS DEBEN SER ENTERAS`);if(Number(l.price||0)<=0)errors.push(`LÍNEA ${n}: PRECIO DEBE SER MAYOR QUE 0`);if(![0,4,10,21].includes(Number(l.vat)))warnings.push(`LÍNEA ${n}: IVA ${l.vat}% NO ESTÁ ENTRE LOS TIPOS CONFIGURADOS`)});if(Number(raw.discount||0)<0||Number(raw.discount||0)>100)errors.push('DESCUENTO GENERAL INVÁLIDO');if(Number(raw.transportValue||0)<0)errors.push('TRANSPORTE NO PUEDE SER NEGATIVO');if(x.total<=0&&raw.type!=='credit')errors.push('TOTAL DE FACTURA DEBE SER MAYOR QUE 0');if(Number(raw.paid||0)>Math.max(0,x.total)+0.01)errors.push('PAGADO NO PUEDE SUPERAR EL TOTAL');return{errors,warnings,invoice:x}}
+export function invoiceStatus(raw={}){if(raw.status==='void')return'ANULADA';if(raw.status==='draft')return'BORRADOR';const x=calcInvoice(raw);if(x.pending<=0)return'PAGADA';if(x.paid>0)return'PARCIAL';if(raw.dueDate&&raw.dueDate<today())return'VENCIDA';return'PENDIENTE'}
+export function lineDescription(raw={}){const l=calcLine(raw);if(l.mode==='caja_kg')return`${l.qty} CAJAS × ${l.kgPerBox} KG = ${l.net} KG`;if(l.mode==='caja_fija')return`${l.qty} CAJAS`;if(l.mode==='manojo')return`${l.qty} MANOJOS`;if(l.mode==='ud')return`${l.qty} UD`;return`${l.net} KG`}
+export function stockMovementQty(raw={}){const l=calcLine(raw);if(l.mode==='caja_kg'||l.mode==='kg')return round2(l.net);return round2(l.qty)}
+export function stockQuantity(moves=[],productId,location=null){return round2((moves||[]).filter(m=>m.productId===productId&&(!location||m.location===location)).reduce((s,m)=>s+Number(m.qty||0),0))}
+export function stockText(product,qty){qty=round2(qty);if(product?.mode==='caja_kg'&&normalizedKgPerBox(product)>0)return`${round2(qty/normalizedKgPerBox(product))} CAJAS · ${qty} KG`;const u=product?.mode==='caja_fija'?'CAJAS':product?.mode==='manojo'?'MANOJOS':product?.mode==='ud'?'UD':'KG';return`${qty} ${u}`}
