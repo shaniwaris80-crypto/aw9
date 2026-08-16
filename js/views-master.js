@@ -13,6 +13,7 @@ import {
 } from './importers.js';
 import {invoiceAfterReset, resetLabel} from './period.js';
 import {can} from './permissions.js';
+import {uploadPurchaseAttachment} from './storage.js';
 
 const st = () => Runtime.state;
 const product = id => Runtime.product(id);
@@ -675,7 +676,7 @@ export function purchaseModal(preset = null) {
         <label>Nº FACTURA<input name="number" value="${esc(seed.number || '')}"></label>
         <label>TRANSPORTE / PORTES €<input name="transport" type="number" step=".01" value="${Number(seed.transport || 0)}"></label>
         <label>DESCUENTO %<input name="discount" type="number" step=".01" value="${Number(seed.discount || 0)}"></label>
-        <label>TOTAL FACTURA ORIGEN €<input name="expectedTotal" type="number" step=".01" value="${Number(seed.expectedTotal || 0)}"></label>
+        <label>TOTAL FACTURA ORIGEN €<input name="expectedTotal" type="number" step=".01" value="${Number(seed.expectedTotal || 0)}"></label><label>FACTURA ORIGINAL (PDF/FOTO)<input name="attachment" type="file" accept="application/pdf,image/*"></label>
       </div>
       <div class="table-wrap">
         <table>
@@ -835,6 +836,7 @@ export function purchaseModal(preset = null) {
       };
 
       await savePurchaseTransaction(purchase, Runtime.user);
+      const attachment=m.querySelector('[name=attachment]')?.files?.[0];if(attachment){try{const up=await uploadPurchaseAttachment(purchase.id,attachment);await saveEntity('purchases',{id:purchase.id,attachments:[...(purchase.attachments||[]),up]},'PURCHASE_ATTACHMENT',Runtime.user);toast('COMPRA Y DOCUMENTO ORIGINAL ARCHIVADOS','good')}catch(err){toast(`COMPRA GUARDADA · ADJUNTO PENDIENTE: ${err.message||err}`,'warn')}}
       toast('COMPRA GUARDADA ATÓMICAMENTE · STOCK Y COSTE REAL ACTUALIZADOS', 'good');
       closeModal();
     } catch (err) {
