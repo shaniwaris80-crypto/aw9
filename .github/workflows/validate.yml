@@ -14,6 +14,8 @@ jobs:
           node --check service-worker.js
       - name: Pruebas de dominio
         run: node tests/domain.test.mjs
+      - name: Pruebas financieras
+        run: node tests/finance.test.mjs
       - name: Imports locales
         run: |
           python3 - <<'PY'
@@ -34,13 +36,18 @@ jobs:
           import pathlib,sys
           fb=pathlib.Path('js/firebase.js').read_text()
           dom=pathlib.Path('js/domain.js').read_text()
+          app=pathlib.Path('js/app.js').read_text()
+          fin=pathlib.Path('js/finance.js').read_text()
           checks={
             'emisión valida factura':'validateInvoice(invoice)' in fb,
             'serie no se reinicia':'if(!seriesSnap.exists())' in fb,
-            'reset stock por ubicación':'for(const p of products||[])for(const location of locations)' in fb,
+            'reset stock cloud por ubicación':'for(const p of products||[])for(const location of locations)' in fb,
+            'reset detecta negativos por ubicación':'stockResetPlan' in fin,
             'fecha local':'export function localDate' in dom,
             'precio cero bloqueado':'PRECIO DEBE SER MAYOR QUE 0' in dom,
             'cierre bloquea emisión':'assertMonthOpenTx' in fb,
+            'coste congelado en líneas':'buyPriceSnapshot' in dom,
+            'centro financiero conectado':"'finance','💹','CENTRO FINANCIERO'" in app,
           }
           bad=[k for k,v in checks.items() if not v]
           print(checks)
