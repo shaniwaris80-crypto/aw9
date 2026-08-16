@@ -1,0 +1,44 @@
+name: Aplicar auditoria ARW2026 v6
+on:
+  push:
+    paths:
+      - 'tools/apply_audit_v6.py'
+      - '.github/workflows/audit-fix-v6.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Aplicar correcciones auditadas
+        run: python3 tools/apply_audit_v6.py
+      - name: Validar sintaxis e imports
+        run: |
+          find js -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check firebase-config.js
+          node --check service-worker.js
+          node tests/domain.test.mjs
+          node tests/finance.test.mjs
+          python3 - <<'PY'
+          import pathlib,re,sys
+          bad=[]
+          for p in pathlib.Path('js').rglob('*.js'):
+              text=p.read_text()
+              for x in re.findall(r"from\s+['\"](\.[^'\"]+)['\"]",text):
+                  q=(p.parent/x).resolve()
+                  if not q.exists(): bad.append((str(p),x))
+          if bad:
+              print(bad);sys.exit(1)
+          print('Imports OK')
+          PY
+      - name: Commit correcciones
+        run: |
+          git config user.name 'shaniwaris80-crypto'
+          git config user.email 'shaniwaris80@gmail.com'
+          git add js firestore.rules service-worker.js firebase-config.js index.html
+          git commit -m 'ARW2026 v6: corregir auditoria integral' || exit 0
+          git push
