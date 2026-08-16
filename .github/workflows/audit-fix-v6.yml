@@ -14,6 +14,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Ajustar patrón de caché del parche
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/apply_audit_v6.py')
+          t=p.read_text()
+          old="rep('service-worker.js',\"'./js/finance.js','./js/views-finance.js'\", \"'./js/finance.js','./js/views-finance.js','./js/permissions.js','./js/health.js'\")"
+          new="rep('service-worker.js',\"'./js/views-finance.js','./js/enhancements.js'\", \"'./js/views-finance.js','./js/permissions.js','./js/health.js','./js/enhancements.js'\")"
+          if old not in t: raise SystemExit('No se encontró el patrón de caché a corregir')
+          p.write_text(t.replace(old,new,1))
+          PY
       - name: Aplicar correcciones auditadas
         run: python3 tools/apply_audit_v6.py
       - name: Validar sintaxis e imports
