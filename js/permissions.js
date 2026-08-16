@@ -17,6 +17,6 @@ export const ACTION_CAPABILITY={
   'expense-new':'expenseWrite','price-mass':'priceWrite','route-new':'routeWrite','report-sales':'invoiceRead','report-purchases':'invoiceRead','finance-export':'financeRead','master-reload':'masterReload','settings-stock':'settingsWrite',
   'transfer-new':'stockOps','waste-new':'stockOps','return-new':'stockOps','inventory-new':'stockOps','doc-quote':'quoteWrite','doc-proforma':'quoteWrite','doc-delivery':'deliveryNoteWrite','close-month':'closeMonth',
   'backup-download':'backupAdmin','backup-restore':'backupAdmin','member-new':'memberAdmin','cash-new':'cashBankWrite','bank-new':'cashBankWrite','container-new':'containerWrite',
-  'monitor-clear-errors':'monitorRead','verifactu-settings':'verifactuAdmin','verifactu-verify':'verifactuRead','verifactu-export':'verifactuRead','verifactu-submit':'verifactuSubmit'
+  'monitor-clear-errors':'monitorRead','verifactu-settings':'verifactuAdmin','verifactu-verify':'verifactuRead','verifactu-export':'verifactuRead','verifactu-submit':'verifactuSubmit','verifactu-check-backend':'verifactuAdmin'
 };
 export function canAction(role,action){const cap=ACTION_CAPABILITY[action];return cap?can(role,cap):true;}
