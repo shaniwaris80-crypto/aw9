@@ -1,0 +1,29 @@
+name: Backup automático Firestore
+on:
+  schedule:
+    - cron: '35 2 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AW999 }}
+      BACKUP_BUCKET: gs://aw999-71828.firebasestorage.app/arw2026-backups
+    steps:
+      - uses: actions/checkout@v4
+      - name: Comprobar credenciales
+        run: |
+          if [ -z "$FIREBASE_SA" ]; then echo 'Falta secret FIREBASE_SERVICE_ACCOUNT_AW999'; exit 1; fi
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_AW999 }}'
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Exportar Firestore completo
+        run: |
+          STAMP=$(date -u +'%Y-%m-%dT%H-%M-%SZ')
+          gcloud firestore export "$BACKUP_BUCKET/$STAMP" --project=aw999-71828
+          echo "Backup creado: $BACKUP_BUCKET/$STAMP"
