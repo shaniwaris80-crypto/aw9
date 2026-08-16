@@ -2,7 +2,8 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn(){ return request.auth != null; }
-    function owner(){ return signedIn() && (request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2' || request.auth.token.email == 'shaniwaris80@gmail.com'); }
+    function hasEmail(){ return signedIn() && request.auth.token.keys().hasAny(['email']); }
+    function owner(){ return signedIn() && (request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2' || (hasEmail() && request.auth.token.email == 'shaniwaris80@gmail.com')); }
     function memberPath(){ return /databases/(default)/documents/companies/arw2026/members/$(request.auth.uid); }
     function member(){ return signedIn() && firestore.exists(memberPath()) && firestore.get(memberPath()).data.active == true; }
     function role(){ return owner() ? 'owner' : (member() ? firestore.get(memberPath()).data.role : 'none'); }
@@ -28,7 +29,9 @@ service firebase.storage {
       allow update, delete: if false;
     }
     match /companies/arw2026/system/{allPaths=**} {
-      allow read, write: if owner() && validFile();
+      allow read: if owner();
+      allow create, update: if owner() && validFile();
+      allow delete: if owner();
     }
     match /{allPaths=**} { allow read, write: if false; }
   }
