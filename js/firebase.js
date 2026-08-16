@@ -5,184 +5,36 @@ import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-
 import {getAuth,setPersistence,browserLocalPersistence,signInWithEmailAndPassword,signInWithPopup,GoogleAuthProvider,signOut,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,getDocs,setDoc,deleteDoc,onSnapshot,writeBatch,runTransaction,query,orderBy,limit,enableMultiTabIndexedDbPersistence} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 
-const app=initializeApp(FIREBASE_CONFIG);
-export const auth=getAuth(app);
-export const db=getFirestore(app);
-enableMultiTabIndexedDbPersistence(db).catch(()=>{});
-const googleProvider=new GoogleAuthProvider();
-const root=()=>doc(db,'companies',ARW.appId);
-const col=name=>collection(root(),name);
-const ref=(name,id)=>doc(root(),name,id);
-
+const app=initializeApp(FIREBASE_CONFIG);export const auth=getAuth(app);export const db=getFirestore(app);enableMultiTabIndexedDbPersistence(db).catch(()=>{});const googleProvider=new GoogleAuthProvider();
+const root=()=>doc(db,'companies',ARW.appId),col=name=>collection(root(),name),ref=(name,id)=>doc(root(),name,id);
 export const COLLECTIONS=['products','clients','suppliers','orders','invoices','payments','purchases','stockMoves','expenses','routes','priceHistory','audit','settings','series','closures','transfers','wastes','returns','inventoryCounts','quotes','proformas','deliveryNotes','cashMovements','bankMovements','communications','containers','notifications','members'];
-const ROLE_COLLECTIONS={
-  owner:COLLECTIONS,admin:COLLECTIONS,manager:COLLECTIONS,
-  billing:['products','clients','orders','invoices','payments','expenses','routes','priceHistory','settings','series','closures','quotes','proformas','deliveryNotes','cashMovements','bankMovements','communications','notifications','stockMoves','suppliers','purchases','transfers','wastes','returns','inventoryCounts','containers'],
-  warehouse:['products','suppliers','purchases','orders','routes','transfers','wastes','returns','inventoryCounts','containers','notifications','stockMoves','settings'],
-  delivery:['clients','products','orders','routes','deliveryNotes','communications','containers','notifications','settings']
-};
-
-export const authApi={
-  async email(email,password){await setPersistence(auth,browserLocalPersistence);return signInWithEmailAndPassword(auth,email,password)},
-  async google(){await setPersistence(auth,browserLocalPersistence);return signInWithPopup(auth,googleProvider)},
-  logout:()=>signOut(auth),on:callback=>onAuthStateChanged(auth,callback)
-};
+const ROLE_COLLECTIONS={owner:COLLECTIONS,admin:COLLECTIONS,manager:COLLECTIONS,billing:['products','clients','orders','invoices','payments','expenses','routes','priceHistory','settings','series','closures','quotes','proformas','deliveryNotes','cashMovements','bankMovements','communications','notifications','stockMoves','suppliers','purchases','transfers','wastes','returns','inventoryCounts','containers'],warehouse:['products','suppliers','purchases','orders','routes','transfers','wastes','returns','inventoryCounts','containers','notifications','stockMoves','settings','priceHistory'],delivery:['clients','products','orders','routes','deliveryNotes','communications','containers','notifications','settings']};
+export const authApi={async email(email,password){await setPersistence(auth,browserLocalPersistence);return signInWithEmailAndPassword(auth,email,password)},async google(){await setPersistence(auth,browserLocalPersistence);return signInWithPopup(auth,googleProvider)},logout:()=>signOut(auth),on:callback=>onAuthStateChanged(auth,callback)};
 export const isOwner=user=>!!user&&(user.uid===ARW.ownerUid||String(user.email||'').toLowerCase()===ARW.ownerEmail.toLowerCase());
-
-export async function userRole(user){
-  if(isOwner(user))return 'owner';
-  if(!user?.uid)return 'none';
-  const s=await getDoc(ref('members',user.uid));
-  return s.exists()&&s.data().active!==false?(s.data().role||'none'):'none';
-}
-
-function stableClientMatch(existing,master){
-  const names=[master.name,...String(master.aliases||'').split(',')].map(normalize).filter(Boolean);
-  return existing.find(c=>names.includes(normalize(c.name))||names.some(n=>n.length>4&&normalize(c.name).includes(n)));
-}
+export async function userRole(user){if(isOwner(user))return'owner';if(!user?.uid)return'none';const s=await getDoc(ref('members',user.uid));return s.exists()&&s.data().active!==false?(s.data().role||'none'):'none'}
+function stableClientMatch(existing,master){const names=[master.name,...String(master.aliases||'').split(',')].map(normalize).filter(Boolean);return existing.find(c=>names.includes(normalize(c.name))||names.some(n=>n.length>4&&normalize(c.name).includes(n)))}
 
 export async function ensureMasterData(user){
-  if(!isOwner(user))return;
-  const settingsRef=ref('settings','main'),settingsSnap=await getDoc(settingsRef),current=settingsSnap.exists()?settingsSnap.data():{};
-  if(current.masterVersion===MASTER_VERSION)return;
-  const [ps,cs,ss]=await Promise.all([getDocs(col('products')),getDocs(col('clients')),getDocs(col('suppliers'))]);
-  const existingProducts=ps.docs.map(d=>({id:d.id,...d.data()})),existingClients=cs.docs.map(d=>({id:d.id,...d.data()})),existingSuppliers=ss.docs.map(d=>({id:d.id,...d.data()}));
-  const batch=writeBatch(db),stamp=now();
-  for(const p of MASTER_PRODUCTS){
-    const old=existingProducts.find(x=>String(x.code||'').toUpperCase()===p.code);
-    // El maestro solo completa estructura; nunca pisa precios/costes/IVA editados por el usuario.
-    const merged=old?{...p,...old,id:p.id,code:p.code,name:old.name||p.name,aliases:old.aliases||p.aliases,masterVersion:MASTER_VERSION,updatedAt:stamp}:{...p,masterVersion:MASTER_VERSION,updatedAt:stamp};
-    batch.set(ref('products',p.id),merged,{merge:true});
-    if(old&&old.id!==p.id)batch.set(ref('products',old.id),{archived:true,duplicateOf:p.id,updatedAt:stamp},{merge:true});
-  }
-  for(const c of MASTER_CLIENTS){
-    const old=stableClientMatch(existingClients,c);
-    const merged=old?{...c,...old,id:c.id,name:old.name||c.name,prices:old.prices||{},masterVersion:MASTER_VERSION,updatedAt:stamp}:{...c,masterVersion:MASTER_VERSION,updatedAt:stamp};
-    batch.set(ref('clients',c.id),merged,{merge:true});
-    if(old&&old.id!==c.id)batch.set(ref('clients',old.id),{archived:true,duplicateOf:c.id,updatedAt:stamp},{merge:true});
-  }
-  for(const s of MASTER_SUPPLIERS){
-    const old=existingSuppliers.find(x=>normalize(x.name)===normalize(s.name));
-    batch.set(ref('suppliers',s.id),old?{...s,...old,id:s.id,updatedAt:stamp}:{...s,updatedAt:stamp},{merge:true});
-    if(old&&old.id!==s.id)batch.set(ref('suppliers',old.id),{archived:true,duplicateOf:s.id,updatedAt:stamp},{merge:true});
-  }
-  batch.set(settingsRef,{id:'main',appName:'ARW2026',companyName:current.companyName||'MOHAMMAD ARSLAN WARIS',companyNif:current.companyNif||'X6389988J',companyAddress:current.companyAddress||'CALLE SAN PABLO 17, 09003 BURGOS',companyPhone:current.companyPhone||'631 667 893',companyEmail:current.companyEmail||ARW.ownerEmail,invoiceSeries:current.invoiceSeries||'FA',invoiceDigits:current.invoiceDigits||5,defaultTransport:current.defaultTransport??10,defaultVat:current.defaultVat??4,masterVersion:MASTER_VERSION,version:ARW.version,updatedAt:stamp},{merge:true});
-  // Nunca reiniciar next de una serie existente.
-  const seriesSnap=await getDoc(ref('series','FA'));
-  if(!seriesSnap.exists())batch.set(ref('series','FA'),{id:'FA',prefix:'FA',next:1,digits:5,active:true,updatedAt:stamp});
-  await batch.commit();
+  if(!isOwner(user))return;const settingsRef=ref('settings','main'),settingsSnap=await getDoc(settingsRef),current=settingsSnap.exists()?settingsSnap.data():{};if(current.masterVersion===MASTER_VERSION)return;
+  const [ps,cs,ss,seriesSnap]=await Promise.all([getDocs(col('products')),getDocs(col('clients')),getDocs(col('suppliers')),getDoc(ref('series','FA'))]),existingProducts=ps.docs.map(d=>({id:d.id,...d.data()})),existingClients=cs.docs.map(d=>({id:d.id,...d.data()})),existingSuppliers=ss.docs.map(d=>({id:d.id,...d.data()})),batch=writeBatch(db),stamp=now();
+  for(const p of MASTER_PRODUCTS){const old=existingProducts.find(x=>String(x.code||'').toUpperCase()===p.code),merged=old?{...p,...old,id:p.id,code:p.code,name:old.name||p.name,aliases:old.aliases||p.aliases,masterVersion:MASTER_VERSION,updatedAt:stamp}:{...p,masterVersion:MASTER_VERSION,updatedAt:stamp};batch.set(ref('products',p.id),merged,{merge:true});if(old&&old.id!==p.id)batch.set(ref('products',old.id),{archived:true,duplicateOf:p.id,updatedAt:stamp},{merge:true})}
+  for(const c of MASTER_CLIENTS){const old=stableClientMatch(existingClients,c),merged=old?{...c,...old,id:c.id,name:old.name||c.name,prices:old.prices||{},masterVersion:MASTER_VERSION,updatedAt:stamp}:{...c,masterVersion:MASTER_VERSION,updatedAt:stamp};batch.set(ref('clients',c.id),merged,{merge:true});if(old&&old.id!==c.id)batch.set(ref('clients',old.id),{archived:true,duplicateOf:c.id,updatedAt:stamp},{merge:true})}
+  for(const s of MASTER_SUPPLIERS){const old=existingSuppliers.find(x=>normalize(x.name)===normalize(s.name));batch.set(ref('suppliers',s.id),old?{...s,...old,id:s.id,updatedAt:stamp}:{...s,updatedAt:stamp},{merge:true});if(old&&old.id!==s.id)batch.set(ref('suppliers',old.id),{archived:true,duplicateOf:s.id,updatedAt:stamp},{merge:true})}
+  batch.set(settingsRef,{id:'main',appName:'ARW2026',companyName:current.companyName||'MOHAMMAD ARSLAN WARIS',companyNif:current.companyNif||'X6389988J',companyAddress:current.companyAddress||'CALLE SAN PABLO 17, 09003 BURGOS',companyPhone:current.companyPhone||'631 667 893',companyEmail:current.companyEmail||ARW.ownerEmail,invoiceSeries:current.invoiceSeries||'FA',invoiceDigits:current.invoiceDigits||5,defaultTransport:current.defaultTransport??10,defaultVat:current.defaultVat??4,masterVersion:MASTER_VERSION,version:ARW.version,updatedAt:stamp},{merge:true});if(!seriesSnap.exists())batch.set(ref('series','FA'),{id:'FA',prefix:'FA',next:1,digits:5,active:true,updatedAt:stamp});await batch.commit();
 }
+export async function subscribeCollections(onState,onError,user=null){const role=await userRole(user||auth.currentUser),names=ROLE_COLLECTIONS[role]||[],state=Object.fromEntries(COLLECTIONS.map(c=>[c,[]])),unsubs=[];for(const name of names){const q=name==='audit'?query(col(name),orderBy('at','desc'),limit(300)):col(name);unsubs.push(onSnapshot(q,snap=>{state[name]=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>!x.archived);onState({...state,role})},err=>onError?.(name,err)))}onState({...state,role});return()=>unsubs.forEach(u=>u())}
+async function assertMonthOpen(date){const month=String(date||today()).slice(0,7),c=await getDoc(ref('closures',`close_${month}`));if(c.exists())throw new Error(`EL MES ${month} ESTÁ CERRADO`)}
+async function assertMonthOpenTx(tx,date){const month=String(date||today()).slice(0,7),c=await tx.get(ref('closures',`close_${month}`));if(c.exists())throw new Error(`EL MES ${month} ESTÁ CERRADO`)}
+export async function saveEntity(name,obj,action='save',user=null){if(name==='expenses'&&obj.date)await assertMonthOpen(obj.date);const id=obj.id||uid(name.slice(0,3));await setDoc(ref(name,id),{...obj,id,updatedAt:now()},{merge:true});if(user){const auditId=uid('a');await setDoc(ref('audit',auditId),{id:auditId,action,entity:name,entityId:id,userEmail:user.email||'',userUid:user.uid,at:now()})}return id}
+export async function deleteEntity(name,id){await deleteDoc(ref(name,id))}
+export async function saveDraft(invoice,user){await assertMonthOpen(invoice.date);const checked=validateInvoice(invoice),id=invoice.id||uid('inv');await setDoc(ref('invoices',id),{...invoice,id,status:'draft',validationErrors:checked.errors,updatedAt:now(),createdAt:invoice.createdAt||now()},{merge:true});const aid=uid('a');await setDoc(ref('audit',aid),{id:aid,action:'DRAFT_SAVE',entity:'invoices',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});return id}
 
-export async function subscribeCollections(onState,onError,user=null){
-  const role=await userRole(user||auth.currentUser),names=ROLE_COLLECTIONS[role]||[];
-  const state=Object.fromEntries(COLLECTIONS.map(c=>[c,[]])),unsubs=[];
-  for(const name of names){
-    const q=name==='audit'?query(col(name),orderBy('at','desc'),limit(300)):col(name);
-    unsubs.push(onSnapshot(q,snap=>{state[name]=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>!x.archived);onState({...state,role})},err=>onError?.(name,err)));
-  }
-  onState({...state,role});
-  return()=>unsubs.forEach(u=>u());
-}
+export async function emitInvoice(invoice,user){if(!navigator.onLine)throw new Error('PARA EMITIR UNA FACTURA DEBES TENER CONEXIÓN A INTERNET');const checked=validateInvoice(invoice);if(checked.errors.length)throw new Error(checked.errors.join(' · '));const calc=checked.invoice,invoiceId=invoice.id||uid('inv'),sid=invoice.seriesId||'FA';return runTransaction(db,async tx=>{await assertMonthOpenTx(tx,invoice.date);const iref=ref('invoices',invoiceId),existing=await tx.get(iref),sref=ref('series',sid),ss=await tx.get(sref);if(existing.exists()&&existing.data().status!=='draft')throw new Error('ESTA FACTURA YA FUE EMITIDA');const s=ss.exists()?ss.data():{prefix:sid,next:1,digits:5},next=Number(s.next||1),number=`${s.prefix||sid}-${String(next).padStart(Number(s.digits||5),'0')}`,stamp=now(),emitted={...calc,id:invoiceId,number,status:'issued',issuedAt:stamp,createdAt:existing.exists()?existing.data().createdAt||stamp:stamp,updatedAt:stamp,issuerSnapshot:invoice.issuerSnapshot||invoice.settingsSnapshot||null,clientSnapshot:invoice.clientSnapshot||null};tx.set(iref,emitted,{merge:false});tx.set(sref,{...s,id:sid,next:next+1,updatedAt:stamp},{merge:true});for(const line of emitted.lines){const qty=stockMovementQty(line);if(qty<=0)continue;const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:-qty,type:'sale',location:'ALMACEN',sourceId:invoiceId,note:`FACTURA ${number}`,date:invoice.date,createdAt:stamp})}for(const orderId of invoice.sourceOrderIds||[])tx.set(ref('orders',orderId),{status:'invoiced',invoiceId,updatedAt:stamp},{merge:true});const docMap={quote:'quotes',proforma:'proformas',delivery:'deliveryNotes'};if(invoice.sourceDocument?.kind&&invoice.sourceDocument?.id&&docMap[invoice.sourceDocument.kind])tx.set(ref(docMap[invoice.sourceDocument.kind],invoice.sourceDocument.id),{invoiceId,status:'invoiced',updatedAt:stamp},{merge:true});if(Number(emitted.paid||0)>0){const pid=uid('pay');tx.set(ref('payments',pid),{id:pid,clientId:invoice.clientId,date:invoice.date,amount:Number(emitted.paid),method:invoice.paymentMethod||'efectivo',allocations:[{invoiceId,amount:Number(emitted.paid)}],createdAt:stamp})}const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'INVOICE_ISSUE',entity:'invoices',entityId:invoiceId,number,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});return emitted})}
+export async function recordPayment(payment,user){const id=payment.id||uid('pay');await runTransaction(db,async tx=>{const refs=(payment.allocations||[]).map(a=>({a,ir:ref('invoices',a.invoiceId)})),snaps=[];for(const item of refs)snaps.push({item,snap:await tx.get(item.ir)});let applied=0;for(const {item,snap} of snaps){if(!snap.exists())continue;const inv=snap.data();if(inv.status==='void')throw new Error('NO SE PUEDE COBRAR UNA FACTURA ANULADA');const pending=calcInvoice(inv).pending,a=Math.min(Number(item.a.amount||0),pending);if(a<=0)continue;applied=round2(applied+a);tx.set(item.ir,{paid:round2(Number(inv.paid||0)+a),updatedAt:now()},{merge:true})}if(applied<=0)throw new Error('NO HAY IMPORTE APLICABLE');tx.set(ref('payments',id),{...payment,id,amount:applied,createdAt:now()});const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'PAYMENT',entity:'payments',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()})});return id}
+export async function voidInvoice(invoice,{returnStock=false,reason=''},user){await runTransaction(db,async tx=>{const ir=ref('invoices',invoice.id),snap=await tx.get(ir);if(!snap.exists())throw new Error('FACTURA NO ENCONTRADA');const current=snap.data();if(current.status==='void')throw new Error('FACTURA YA ANULADA');const paid=Number(current.paid||0),stamp=now();tx.set(ir,{status:'void',paid:0,voidReason:String(reason||'').toUpperCase(),voidedAt:stamp,updatedAt:stamp},{merge:true});if(returnStock)for(const line of calcInvoice(current).lines){const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:stockMovementQty(line),type:'void_return',location:'ALMACEN',sourceId:invoice.id,note:`ANULADA ${invoice.number}`,date:today(),createdAt:stamp})}if(paid>0){const pid=uid('pay');tx.set(ref('payments',pid),{id:pid,clientId:current.clientId,date:today(),amount:-paid,method:'reversal',allocations:[{invoiceId:invoice.id,amount:-paid}],note:`REVERSIÓN POR ANULACIÓN ${invoice.number}`,createdAt:stamp})}const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'INVOICE_VOID',entity:'invoices',entityId:invoice.id,reason,paidReversed:paid,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp})})}
+export async function createRectification(original,newLines,reason,user,direction='credit',opts={}){if(!navigator.onLine)throw new Error('SE NECESITA CONEXIÓN PARA RECTIFICAR');const sid=original.seriesId||'FA',id=uid('inv');return runTransaction(db,async tx=>{await assertMonthOpenTx(tx,today());const sref=ref('series',sid),ss=await tx.get(sref),s=ss.exists()?ss.data():{prefix:sid,next:1,digits:5},next=Number(s.next||1),number=`${s.prefix||sid}-R${String(next).padStart(Number(s.digits||5),'0')}`,stamp=now(),credit=calcInvoice({id,clientId:original.clientId,date:today(),type:direction==='debit'?'debit':'credit',status:'issued',seriesId:sid,number,originalInvoiceId:original.id,originalInvoiceNumber:original.number,reason:String(reason||'').toUpperCase(),transportType:opts.transportType||'fixed',transportValue:Number(opts.transportValue||0),discount:Number(opts.discount??0),equivalenceSurcharge:Boolean(original.equivalenceSurcharge),lines:newLines,clientSnapshot:original.clientSnapshot,issuerSnapshot:original.issuerSnapshot||null});tx.set(ref('invoices',id),{...credit,issuedAt:stamp,createdAt:stamp,updatedAt:stamp});tx.set(sref,{...s,next:next+1,updatedAt:stamp},{merge:true});tx.set(ref('invoices',original.id),{rectificationIds:[...(original.rectificationIds||[]),id],updatedAt:stamp},{merge:true});if(opts.returnStock&&direction!=='debit')for(const line of credit.lines){const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:stockMovementQty(line),type:'rectification_return',location:opts.location||'ALMACEN',sourceId:id,note:`RECTIFICATIVA ${number}`,date:today(),createdAt:stamp})}const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'RECTIFICATION',entity:'invoices',entityId:id,originalId:original.id,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});return credit})}
 
-export async function saveEntity(name,obj,action='save',user=null){
-  const id=obj.id||uid(name.slice(0,3));await setDoc(ref(name,id),{...obj,id,updatedAt:now()},{merge:true});
-  if(user){const auditId=uid('a');await setDoc(ref('audit',auditId),{id:auditId,action,entity:name,entityId:id,userEmail:user.email||'',userUid:user.uid,at:now()})}
-  return id;
-}
-export async function deleteEntity(name,id){await deleteDoc(ref(name,id));}
-export async function saveDraft(invoice,user){
-  const id=invoice.id||uid('inv');await setDoc(ref('invoices',id),{...invoice,id,status:'draft',updatedAt:now()},{merge:true});
-  const aid=uid('a');await setDoc(ref('audit',aid),{id:aid,action:'DRAFT_SAVE',entity:'invoices',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});return id;
-}
-
-async function assertMonthOpenTx(tx,date){
-  const month=String(date||today()).slice(0,7),c=await tx.get(ref('closures',`close_${month}`));
-  if(c.exists())throw new Error(`EL MES ${month} ESTÁ CERRADO`);
-}
-
-export async function emitInvoice(invoice,user){
-  if(!navigator.onLine)throw new Error('PARA EMITIR UNA FACTURA DEBES TENER CONEXIÓN A INTERNET');
-  const checked=validateInvoice(invoice);if(checked.errors.length)throw new Error(checked.errors.join(' · '));
-  const calc=checked.invoice,invoiceId=invoice.id||uid('inv'),sid=invoice.seriesId||'FA';
-  return runTransaction(db,async tx=>{
-    await assertMonthOpenTx(tx,invoice.date);
-    const iref=ref('invoices',invoiceId),existing=await tx.get(iref);if(existing.exists()&&existing.data().status!=='draft')throw new Error('ESTA FACTURA YA FUE EMITIDA');
-    const sref=ref('series',sid),ss=await tx.get(sref),s=ss.exists()?ss.data():{prefix:sid,next:1,digits:5};
-    const next=Number(s.next||1),number=`${s.prefix||sid}-${String(next).padStart(Number(s.digits||5),'0')}`,stamp=now();
-    const emitted={...calc,id:invoiceId,number,status:'issued',issuedAt:stamp,createdAt:existing.exists()?existing.data().createdAt||stamp:stamp,updatedAt:stamp,issuerSnapshot:invoice.issuerSnapshot||invoice.settingsSnapshot||null,clientSnapshot:invoice.clientSnapshot||null};
-    tx.set(iref,emitted,{merge:false});tx.set(sref,{...s,id:sid,next:next+1,updatedAt:stamp},{merge:true});
-    for(const line of emitted.lines){const qty=stockMovementQty(line);if(qty<=0)continue;const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:-qty,type:'sale',location:'ALMACEN',sourceId:invoiceId,note:`FACTURA ${number}`,date:invoice.date,createdAt:stamp})}
-    for(const orderId of invoice.sourceOrderIds||[])tx.set(ref('orders',orderId),{status:'invoiced',invoiceId,updatedAt:stamp},{merge:true});
-    if(Number(emitted.paid||0)>0){const pid=uid('pay');tx.set(ref('payments',pid),{id:pid,clientId:invoice.clientId,date:invoice.date,amount:Number(emitted.paid),method:invoice.paymentMethod||'efectivo',allocations:[{invoiceId,amount:Number(emitted.paid)}],createdAt:stamp})}
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'INVOICE_ISSUE',entity:'invoices',entityId:invoiceId,number,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});return emitted;
-  });
-}
-
-export async function recordPayment(payment,user){
-  const id=payment.id||uid('pay');
-  await runTransaction(db,async tx=>{
-    const refs=(payment.allocations||[]).map(a=>({a,ir:ref('invoices',a.invoiceId)})),snaps=[];
-    for(const item of refs)snaps.push({item,snap:await tx.get(item.ir)});
-    let applied=0;for(const {item,snap} of snaps){if(!snap.exists())continue;const inv=snap.data();if(inv.status==='void')throw new Error('NO SE PUEDE COBRAR UNA FACTURA ANULADA');const pending=calcInvoice(inv).pending,a=Math.min(Number(item.a.amount||0),pending);if(a<=0)continue;applied=round2(applied+a);tx.set(item.ir,{paid:round2(Number(inv.paid||0)+a),updatedAt:now()},{merge:true})}
-    if(applied<=0)throw new Error('NO HAY IMPORTE APLICABLE');
-    tx.set(ref('payments',id),{...payment,id,amount:applied,createdAt:now()});
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'PAYMENT',entity:'payments',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});
-  });return id;
-}
-
-export async function voidInvoice(invoice,{returnStock=false,reason=''},user){
-  await runTransaction(db,async tx=>{
-    const ir=ref('invoices',invoice.id),snap=await tx.get(ir);if(!snap.exists())throw new Error('FACTURA NO ENCONTRADA');const current=snap.data();if(current.status==='void')throw new Error('FACTURA YA ANULADA');
-    const paid=Number(current.paid||0),stamp=now();
-    tx.set(ir,{status:'void',paid:0,voidReason:String(reason||'').toUpperCase(),voidedAt:stamp,updatedAt:stamp},{merge:true});
-    if(returnStock)for(const line of calcInvoice(current).lines){const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:stockMovementQty(line),type:'void_return',location:'ALMACEN',sourceId:invoice.id,note:`ANULADA ${invoice.number}`,date:today(),createdAt:stamp})}
-    if(paid>0){const pid=uid('pay');tx.set(ref('payments',pid),{id:pid,clientId:current.clientId,date:today(),amount:-paid,method:'reversal',allocations:[{invoiceId:invoice.id,amount:-paid}],note:`REVERSIÓN POR ANULACIÓN ${invoice.number}`,createdAt:stamp})}
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'INVOICE_VOID',entity:'invoices',entityId:invoice.id,reason,paidReversed:paid,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});
-  });
-}
-
-export async function createRectification(original,newLines,reason,user,direction='credit',opts={}){
-  if(!navigator.onLine)throw new Error('SE NECESITA CONEXIÓN PARA RECTIFICAR');
-  const sid=original.seriesId||'FA',id=uid('inv');
-  return runTransaction(db,async tx=>{
-    await assertMonthOpenTx(tx,today());
-    const sref=ref('series',sid),ss=await tx.get(sref),s=ss.exists()?ss.data():{prefix:sid,next:1,digits:5},next=Number(s.next||1),number=`${s.prefix||sid}-R${String(next).padStart(Number(s.digits||5),'0')}`,stamp=now();
-    const credit=calcInvoice({id,clientId:original.clientId,date:today(),type:direction==='debit'?'debit':'credit',status:'issued',seriesId:sid,number,originalInvoiceId:original.id,originalInvoiceNumber:original.number,reason:String(reason||'').toUpperCase(),transportType:opts.transportType||'fixed',transportValue:Number(opts.transportValue||0),discount:0,equivalenceSurcharge:Boolean(original.equivalenceSurcharge),lines:newLines,clientSnapshot:original.clientSnapshot,issuerSnapshot:original.issuerSnapshot||null});
-    tx.set(ref('invoices',id),{...credit,issuedAt:stamp,createdAt:stamp,updatedAt:stamp});tx.set(sref,{...s,next:next+1,updatedAt:stamp},{merge:true});tx.set(ref('invoices',original.id),{rectificationIds:[...(original.rectificationIds||[]),id],updatedAt:stamp},{merge:true});
-    if(opts.returnStock&&direction!=='debit')for(const line of credit.lines){const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty:stockMovementQty(line),type:'rectification_return',location:opts.location||'ALMACEN',sourceId:id,note:`RECTIFICATIVA ${number}`,date:today(),createdAt:stamp})}
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'RECTIFICATION',entity:'invoices',entityId:id,originalId:original.id,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});return credit;
-  });
-}
-
-export async function savePurchaseTransaction(purchase,user){
-  const id=purchase.id||uid('pur'),stamp=now();
-  return runTransaction(db,async tx=>{
-    await assertMonthOpenTx(tx,purchase.date);
-    if(purchase.supplierId&&purchase.number){const existing=await getDocs(col('purchases'));if(existing.docs.some(d=>{const x=d.data();return d.id!==id&&x.supplierId===purchase.supplierId&&normalize(x.number)===normalize(purchase.number)}))throw new Error('FACTURA DE PROVEEDOR DUPLICADA')}
-    tx.set(ref('purchases',id),{...purchase,id,createdAt:purchase.createdAt||stamp,updatedAt:stamp},{merge:false});
-    for(const line of purchase.lines||[]){const pRef=ref('products',line.productId),ps=await tx.get(pRef);if(!ps.exists())continue;const p=ps.data(),qty=stockMovementQty(line);const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty,type:'purchase',location:'ALMACEN',sourceId:id,note:`COMPRA ${purchase.number||''}`,date:purchase.date,createdAt:stamp});
-      const cost=Number(line.effectiveUnitCost??line.price??p.buyPrice??0);tx.set(pRef,{buyPrice:round2(cost),updatedAt:stamp},{merge:true});const hid=uid('ph');tx.set(ref('priceHistory',hid),{id:hid,productId:line.productId,date:purchase.date,oldPrice:Number(p.buyPrice||0),newPrice:round2(cost),source:'COMPRA',purchaseId:id,at:stamp});}
-    const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'PURCHASE_SAVE',entity:'purchases',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});
-  });return id;
-}
-
-export async function zeroAllStockCloud(products,moves,user,reason='REINICIO DE STOCK'){
-  if(!isOwner(user))throw new Error('SOLO EL PROPIETARIO PUEDE PONER TODO EL STOCK A 0');
-  const locations=[...new Set((moves||[]).map(m=>m.location||'ALMACEN'))];if(!locations.includes('ALMACEN'))locations.push('ALMACEN');
-  const adjustments=[];for(const p of products||[])for(const location of locations){const qty=stockQuantity(moves||[],p.id,location);if(Math.abs(qty)>.0001)adjustments.push({p,location,qty})}
-  if(!adjustments.length)return 0;
-  const batch=writeBatch(db),stamp=now(),date=today();
-  for(const {p,location,qty} of adjustments){const id=uid('sm');batch.set(ref('stockMoves',id),{id,productId:p.id,qty:round2(-qty),type:'stock_reset',location,sourceId:'MANUAL_RESET',note:String(reason||'').toUpperCase(),date,createdAt:stamp})}
-  const aid=uid('a');batch.set(ref('audit',aid),{id:aid,action:'STOCK_RESET_ALL',entity:'stockMoves',count:adjustments.length,reason:String(reason||'').toUpperCase(),userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});
-  await batch.commit();return adjustments.length;
-}
-
-export async function resetOperationalWeek(summary={},user){
-  if(!isOwner(user))throw new Error('SOLO EL PROPIETARIO PUEDE INICIAR UNA NUEVA SEMANA');
-  const start=today(),id=`week_${start}_${Date.now().toString(36)}`,stamp=now(),batch=writeBatch(db);
-  batch.set(ref('closures',id),{id,type:'weekly_reset',date:start,summary,createdAt:stamp,userEmail:user?.email||'',userUid:user?.uid||''});
-  batch.set(ref('settings','main'),{operationalWeekStart:start,lastWeeklyResetAt:stamp,updatedAt:stamp},{merge:true});
-  const aid=uid('a');batch.set(ref('audit',aid),{id:aid,action:'WEEK_RESET',entity:'settings',entityId:'main',summary,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});
-  await batch.commit();return id;
-}
-export async function forceMasterData(user){if(!isOwner(user))throw new Error('SOLO PROPIETARIO');await setDoc(ref('settings','main'),{masterVersion:'',updatedAt:now()},{merge:true});await ensureMasterData(user);}
+export async function savePurchaseTransaction(purchase,user){const id=purchase.id||uid('pur'),stamp=now();if(purchase.supplierId&&purchase.number){const existing=await getDocs(col('purchases')),dup=existing.docs.some(d=>{const x=d.data();return d.id!==id&&x.supplierId===purchase.supplierId&&normalize(x.number)===normalize(purchase.number)});if(dup)throw new Error('FACTURA DE PROVEEDOR DUPLICADA')}return runTransaction(db,async tx=>{await assertMonthOpenTx(tx,purchase.date);const unique=[...new Set((purchase.lines||[]).map(l=>l.productId))],productSnaps=new Map();for(const pid of unique)productSnaps.set(pid,await tx.get(ref('products',pid)));tx.set(ref('purchases',id),{...purchase,id,createdAt:purchase.createdAt||stamp,updatedAt:stamp},{merge:false});for(const line of purchase.lines||[]){const ps=productSnaps.get(line.productId);if(!ps?.exists())throw new Error(`PRODUCTO NO ENCONTRADO: ${line.productId}`);const p=ps.data(),qty=stockMovementQty(line);if(qty<=0)throw new Error(`CANTIDAD INVÁLIDA: ${p.name||line.productId}`);const mid=uid('sm');tx.set(ref('stockMoves',mid),{id:mid,productId:line.productId,qty,type:'purchase',location:'ALMACEN',sourceId:id,note:`COMPRA ${purchase.number||''}`,date:purchase.date,createdAt:stamp});const cost=Number(line.effectiveUnitCost??line.price??p.buyPrice??0);tx.set(ref('products',line.productId),{buyPrice:round2(cost),updatedAt:stamp},{merge:true});const hid=uid('ph');tx.set(ref('priceHistory',hid),{id:hid,type:'cost',productId:line.productId,date:purchase.date,oldPrice:Number(p.buyPrice||0),newPrice:round2(cost),source:'COMPRA',purchaseId:id,at:stamp})}const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'PURCHASE_SAVE',entity:'purchases',entityId:id,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp})});return id}
+export async function zeroAllStockCloud(products,moves,user,reason='REINICIO DE STOCK'){if(!isOwner(user))throw new Error('SOLO EL PROPIETARIO PUEDE PONER TODO EL STOCK A 0');const locations=[...new Set((moves||[]).map(m=>m.location||'ALMACEN'))];if(!locations.includes('ALMACEN'))locations.push('ALMACEN');const adjustments=[];for(const p of products||[])for(const location of locations){const qty=stockQuantity(moves||[],p.id,location);if(Math.abs(qty)>.0001)adjustments.push({p,location,qty})}if(!adjustments.length)return 0;const batch=writeBatch(db),stamp=now(),date=today();for(const {p,location,qty} of adjustments){const id=uid('sm');batch.set(ref('stockMoves',id),{id,productId:p.id,qty:round2(-qty),type:'stock_reset',location,sourceId:'MANUAL_RESET',note:String(reason||'').toUpperCase(),date,createdAt:stamp})}const aid=uid('a');batch.set(ref('audit',aid),{id:aid,action:'STOCK_RESET_ALL',entity:'stockMoves',count:adjustments.length,reason:String(reason||'').toUpperCase(),userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});await batch.commit();return adjustments.length}
+export async function resetOperationalWeek(summary={},user){if(!isOwner(user))throw new Error('SOLO EL PROPIETARIO PUEDE INICIAR UNA NUEVA SEMANA');const start=today(),id=`week_${start}_${Date.now().toString(36)}`,stamp=now(),batch=writeBatch(db);batch.set(ref('closures',id),{id,type:'weekly_reset',date:start,summary,createdAt:stamp,userEmail:user?.email||'',userUid:user?.uid||''});batch.set(ref('settings','main'),{operationalWeekStart:start,lastWeeklyResetAt:stamp,updatedAt:stamp},{merge:true});const aid=uid('a');batch.set(ref('audit',aid),{id:aid,action:'WEEK_RESET',entity:'settings',entityId:'main',summary,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});await batch.commit();return id}
+export async function forceMasterData(user){if(!isOwner(user))throw new Error('SOLO PROPIETARIO');await setDoc(ref('settings','main'),{masterVersion:'',updatedAt:now()},{merge:true});await ensureMasterData(user)}
