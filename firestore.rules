@@ -15,10 +15,10 @@ service cloud.firestore {
 
     match /companies/arw2026/members/{uid} {
       allow read: if owner() || (signedIn() && request.auth.uid == uid);
-      allow write: if owner();
+      allow create, update, delete: if owner();
     }
     match /companies/arw2026/settings/{id} { allow read: if active(); allow write: if manager(); }
-    match /companies/arw2026/series/{id} { allow read: if billing(); allow create: if manager(); allow update: if billing(); allow delete: if owner(); }
+    match /companies/arw2026/series/{id} { allow read: if billing(); allow create: if manager() || owner(); allow update: if billing(); allow delete: if owner(); }
     match /companies/arw2026/audit/{id} { allow read: if manager(); allow create: if active(); allow update, delete: if false; }
     match /companies/arw2026/invoices/{id} {
       allow read: if billing();
