@@ -10,9 +10,9 @@
     "test:all":"npm run test && npm run test:rules && npm run test:browser"
   },
   "devDependencies":{
-    "@firebase/rules-unit-testing":"^4.0.1",
+    "@firebase/rules-unit-testing":"4.0.1",
     "@playwright/test":"^1.55.0",
-    "firebase":"^12.2.1",
+    "firebase":"^11.0.0",
     "firebase-tools":"^14.12.1"
   }
 }
