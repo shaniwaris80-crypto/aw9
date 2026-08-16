@@ -14,23 +14,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Normalizar acciones del dashboard
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          e=Path('js/enhancements.js')
-          s=e.read_text()
-          corrected="""  const actions=[can(Runtime.role,'invoiceWrite')?'<button class=\"btn primary\" data-action=\"invoice-new\">＋ FACTURA</button>':'',can(Runtime.role,'orderWrite')?'<button class=\"btn\" data-action=\"paste-order\">PEGAR PEDIDO</button>':'',can(Runtime.role,'invoiceWrite')?'<button class=\"btn\" data-action=\"invoice-all-delivered\">⚡ FACTURAR TODA LA RUTA</button>':'',can(Runtime.role,'weekReset')?'<button class=\"btn\" data-action=\"week-reset\">↻ PONER CONTADORES A 0</button>':''].join('');
-  return"""
-          out,n=re.subn(r"  const actions=\[.*?\]\.join\(''\);\n  return",corrected,s,count=1,flags=re.S)
-          if n!=1: raise SystemExit(f'No se pudo normalizar dashboard: {n}')
-          e.write_text(out)
-          p=Path('tools/final_audit_v6.py')
-          lines=p.read_text().splitlines()
-          lines=[l for l in lines if not l.startswith("rep('js/enhancements.js',\"can(Runtime.role,'weekReset')?")]
-          p.write_text('\n'.join(lines)+'\n')
-          PY
       - name: Aplicar cierre de auditoría
         run: python3 tools/final_audit_v6.py
       - name: Validar todo antes de publicar
