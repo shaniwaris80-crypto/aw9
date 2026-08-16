@@ -16,6 +16,8 @@ jobs:
         run: node tests/domain.test.mjs
       - name: Pruebas financieras
         run: node tests/finance.test.mjs
+      - name: Pruebas de auditoría y permisos
+        run: node tests/audit.test.mjs
       - name: Imports locales
         run: |
           python3 - <<'PY'
@@ -27,10 +29,10 @@ jobs:
                   q=(p.parent/x).resolve()
                   if not q.exists(): bad.append((str(p),x))
           if bad:
-              print(bad);sys.exit(1)
+            print(bad);sys.exit(1)
           print('Imports OK')
           PY
-      - name: Auditoría de invariantes
+      - name: Auditoría de invariantes críticas
         run: |
           python3 - <<'PY'
           import pathlib,sys
@@ -38,6 +40,8 @@ jobs:
           dom=pathlib.Path('js/domain.js').read_text()
           app=pathlib.Path('js/app.js').read_text()
           fin=pathlib.Path('js/finance.js').read_text()
+          ops=pathlib.Path('js/views-ops.js').read_text()
+          rules=pathlib.Path('firestore.rules').read_text()
           checks={
             'emisión valida factura':'validateInvoice(invoice)' in fb,
             'serie no se reinicia':'if(!seriesSnap.exists())' in fb,
@@ -46,8 +50,12 @@ jobs:
             'fecha local':'export function localDate' in dom,
             'precio cero bloqueado':'PRECIO DEBE SER MAYOR QUE 0' in dom,
             'cierre bloquea emisión':'assertMonthOpenTx' in fb,
-            'coste congelado en líneas':'buyPriceSnapshot' in dom,
+            'coste congelado en emisión':'buyPriceSnapshot:Number(l.buyPriceSnapshot??p?.buyPrice??0)' in fb,
             'centro financiero conectado':"'finance','💹','CENTRO FINANCIERO'" in app,
+            'permisos centralizados':'canAction(Runtime.role,name)' in app,
+            'stock ops atómico':'saveStockOperation' in ops,
+            'cierre usa stock a fecha':'function stockAt(' in ops,
+            'emitida inmutable en reglas':"resource.data.status == 'draft'" in rules and 'allow update: if manager() ||' not in rules,
           }
           bad=[k for k,v in checks.items() if not v]
           print(checks)
