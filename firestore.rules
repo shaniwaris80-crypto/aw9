@@ -13,16 +13,12 @@ service cloud.firestore {
     function active(){ return owner() || member(); }
     function special(c){ return c in ['members','settings','series','audit','invoices','payments','stockMoves','closures']; }
 
-    match /companies/arw2026/members/{uid} {
-      allow read: if owner() || (signedIn() && request.auth.uid == uid);
-      allow create, update, delete: if owner();
-    }
+    match /companies/arw2026/members/{uid} { allow read: if owner() || (signedIn() && request.auth.uid == uid); allow create, update, delete: if owner(); }
     match /companies/arw2026/settings/{id} { allow read: if active(); allow write: if manager(); }
-    match /companies/arw2026/series/{id} { allow read: if billing(); allow create: if manager() || owner(); allow update: if billing(); allow delete: if owner(); }
+    match /companies/arw2026/series/{id} { allow read: if billing(); allow create: if manager(); allow update: if billing(); allow delete: if owner(); }
     match /companies/arw2026/audit/{id} { allow read: if manager(); allow create: if active(); allow update, delete: if false; }
     match /companies/arw2026/invoices/{id} {
-      allow read: if billing();
-      allow create: if billing();
+      allow read: if billing(); allow create: if billing();
       allow update: if manager() || (billing() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','voidReason','voidedAt','rectificationIds','paid','sentAt','updatedAt']));
       allow delete: if billing() && resource.data.status == 'draft';
     }
@@ -34,13 +30,13 @@ service cloud.firestore {
       allow read: if !special(collection) && active() && (
         manager()
         || (billing() && collection in ['clients','products','orders','quotes','proformas','deliveryNotes','priceHistory','expenses','routes','communications','notifications','suppliers','purchases','transfers','wastes','returns','inventoryCounts','containers','cashMovements','bankMovements'])
-        || (warehouse() && collection in ['products','suppliers','purchases','orders','routes','transfers','wastes','returns','inventoryCounts','containers','notifications'])
+        || (warehouse() && collection in ['products','suppliers','purchases','orders','routes','transfers','wastes','returns','inventoryCounts','containers','notifications','priceHistory'])
         || (delivery() && collection in ['clients','products','orders','routes','deliveryNotes','communications','containers','notifications'])
       );
       allow create, update: if !special(collection) && active() && (
         manager()
         || (billing() && collection in ['clients','orders','quotes','proformas','deliveryNotes','priceHistory','expenses','routes','communications','notifications','cashMovements','bankMovements'])
-        || (warehouse() && collection in ['products','suppliers','purchases','transfers','wastes','returns','inventoryCounts','containers'])
+        || (warehouse() && collection in ['products','suppliers','purchases','transfers','wastes','returns','inventoryCounts','containers','priceHistory'])
         || (delivery() && collection in ['orders','routes','deliveryNotes','communications','containers'])
       );
       allow delete: if !special(collection) && manager();
