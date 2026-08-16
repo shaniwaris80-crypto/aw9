@@ -296,7 +296,7 @@ export function clientModal(existing = null) {
 }
 
 export function client360(c) {
-  const canEditClient=can(Runtime.role,'clientWrite');
+  const canEditClient=can(Runtime.role,'clientWrite'),canSeeFinance=can(Runtime.role,'invoiceRead');
   const period = clientStats(c, true);
   const history = clientStats(c, false);
   const invs = (st().invoices || [])
@@ -308,6 +308,12 @@ export function client360(c) {
   const pays = (st().payments || [])
     .filter(p => p.clientId === c.id)
     .sort((a, b) => String(b.createdAt || b.date).localeCompare(String(a.createdAt || a.date)));
+
+  if(!canSeeFinance){
+    const byProduct=new Map();for(const o of orders)for(const l of o.lines||[]){const old=byProduct.get(l.productId)||{count:0,qty:0};old.count++;old.qty+=Number(l.deliveredQty||l.requestedQty||0);byProduct.set(l.productId,old)}
+    const orderRows=orders.slice(0,50).map(o=>`<tr><td>${esc(o.date||'')}</td><td>${badge(o.status||'')}</td><td>${o.lines?.length||0}</td></tr>`),productRows=[...byProduct].sort((a,b)=>b[1].count-a[1].count).slice(0,20).map(([pid,v])=>`<tr><td><b>${esc(product(pid)?.name||pid)}</b></td><td>${v.count}</td><td>${round2(v.qty)}</td></tr>`);
+    modal(`CLIENTE 360º · ${c.name}`,`<div class="panel"><h3>CONTACTO</h3><p><b>${esc(c.name||'')}</b></p><p>${esc(c.address||'')}</p><p>${esc(c.phone||c.whatsapp||'')}</p></div><div class="grid2"><div><h3>PEDIDOS RECIENTES</h3>${table(['FECHA','ESTADO','LÍNEAS'],orderRows)}</div><div><h3>PRODUCTOS HABITUALES SEGÚN PEDIDOS</h3>${table(['PRODUCTO','PEDIDOS','CANT.'],productRows)}</div></div>`);return;
+  }
 
   const habitual = new Map();
   for (const inv of invs) {

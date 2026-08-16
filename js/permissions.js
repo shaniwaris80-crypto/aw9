@@ -24,7 +24,8 @@ export const CAPABILITY_ROLES={
   auditRead:['owner','admin','manager'],
   memberAdmin:['owner'],
   backupAdmin:['owner'],
-  masterReload:['owner']
+  masterReload:['owner'],
+  settingsWrite:['owner','admin','manager']
 };
 
 export function can(role,capability){return Boolean(CAPABILITY_ROLES[capability]?.includes(role));}
@@ -37,7 +38,7 @@ export const ACTION_CAPABILITY={
   'invoice-history-toggle':'invoiceRead','order-history-toggle':'orderWrite','supplier-new':'supplierWrite',
   'purchase-new':'purchaseWrite','purchase-import':'purchaseWrite','purchase-prompt':'purchaseWrite','products-export':'productRead',
   'clients-export':'clientRead','stock-export':'stockAdjust','expense-new':'expenseWrite','price-mass':'priceWrite','route-new':'routeWrite',
-  'report-sales':'invoiceRead','report-purchases':'invoiceRead','finance-export':'financeRead','master-reload':'masterReload',
+  'report-sales':'invoiceRead','report-purchases':'invoiceRead','finance-export':'financeRead','master-reload':'masterReload','settings-stock':'settingsWrite',
   'transfer-new':'stockOps','waste-new':'stockOps','return-new':'stockOps','inventory-new':'stockOps',
   'doc-quote':'quoteWrite','doc-proforma':'quoteWrite','doc-delivery':'deliveryNoteWrite','close-month':'closeMonth',
   'backup-download':'backupAdmin','backup-restore':'backupAdmin','member-new':'memberAdmin','cash-new':'cashBankWrite',

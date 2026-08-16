@@ -95,3 +95,14 @@ Datos bajo `companies/arw2026`. Deben publicarse manualmente `firestore.rules` y
 
 ## Validación automática
 GitHub Actions comprueba sintaxis, imports, pruebas de dominio y pruebas financieras. Entre otras invariantes: caja × kg, transporte 10/15%, IVA, recargo, precio cero, cajas fraccionadas, stock por ubicación, fecha local, importador, coste con portes, corte operativo, beneficio por factura, coste histórico y reset de stock negativo aunque el total global del producto sea cero.
+
+
+## Auditoría v6
+- Diagnóstico de integridad en tiempo real desde AUDITORÍA.
+- Permisos centralizados y alineados con Firestore.
+- Facturas emitidas bloqueadas; borradores editables.
+- Coste congelado al emitir cualquier factura.
+- Operaciones de stock atómicas.
+- Cierre mensual con stock y coste a fecha de cierre.
+- Ubicación de salida de stock configurable.
+- Pruebas automáticas de dominio, finanzas, permisos, salud e invariantes.
