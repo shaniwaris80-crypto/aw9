@@ -17,6 +17,12 @@ export function costAtDate(productId,invoice={},line={},products=[],priceHistory
   return{unitCost:n(p?.buyPrice),source:'current'};
 }
 
+export function stockResetPlan(products=[],moves=[],baseLocations=[]){
+  const locations=[...new Set(['ALMACEN','FURGONETA','SAN PABLO','SAN LESMES','SANTIAGO',...(baseLocations||[]),...(moves||[]).map(m=>m.location||'ALMACEN')])],out=[];
+  for(const p of products||[])for(const location of locations){const qty=stockQuantity(moves,p.id,location);if(Math.abs(qty)>.0001)out.push({productId:p.id,product:p,location,qty,adjustment:round2(-qty)})}
+  return out;
+}
+
 function stockCostDirection(invoice,stockMoves=[]){
   const related=(stockMoves||[]).filter(m=>m.sourceId===invoice.id);
   if(invoice.type==='credit')return related.some(m=>n(m.qty)>0)?-1:0;
