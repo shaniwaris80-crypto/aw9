@@ -3,6 +3,7 @@ import {initializeApp} from 'firebase-admin/app';
 import {getFirestore,FieldValue} from 'firebase-admin/firestore';
 import {defineSecret} from 'firebase-functions/params';
 import {onCall,HttpsError} from 'firebase-functions/v2/https';
+import {onSchedule} from 'firebase-functions/v2/scheduler';
 
 initializeApp();const db=getFirestore(),PFX=defineSecret('VERIFACTU_PFX_BASE64'),PFX_PASSWORD=defineSecret('VERIFACTU_PFX_PASSWORD');
 const OWNER_UID='o6rMhcEyUXUstmb7ptClXSv8ejQ2',ROOT='companies/arw2026';
@@ -23,3 +24,29 @@ function postXml(url,xml,pfx,passphrase){return new Promise((resolve,reject)=>{c
 export const submitVerifactu=onCall({region:'europe-west1',secrets:[PFX,PFX_PASSWORD],timeoutSeconds:60,memory:'256MiB'},async req=>{if(!req.auth)throw new HttpsError('unauthenticated','LOGIN REQUERIDO');const r=await role(req.auth.uid);if(!allowed(r))throw new HttpsError('permission-denied','ROL SIN PERMISO');const id=String(req.data?.recordId||'');if(!id)throw new HttpsError('invalid-argument','recordId requerido');const ref=db.doc(`${ROOT}/fiscalRecords/${id}`),snap=await ref.get();if(!snap.exists)throw new HttpsError('not-found','Registro fiscal no encontrado');const record=snap.data();if(!['prepared','pending_submission','retry'].includes(record.status))return{ok:true,alreadyProcessed:true,status:record.status};const settings=(await db.doc(`${ROOT}/settings/main`).get()).data()||{},environment=settings.verifactuEnvironment||'test';if(environment==='production'&&!settings.verifactuProductionConfirmed)throw new HttpsError('failed-precondition','Producción no confirmada');const pfxText=PFX.value();if(!pfxText)throw new HttpsError('failed-precondition','Certificado no configurado');const xml=envelope(record),resp=await postXml(environment==='production'?PROD:TEST,xml,Buffer.from(pfxText,'base64'),PFX_PASSWORD.value()),estado=extract(resp.body,'EstadoRegistro')||extract(resp.body,'EstadoEnvio')||'',code=extract(resp.body,'CodigoErrorRegistro')||'',desc=extract(resp.body,'DescripcionErrorRegistro')||'',accepted=/Correcto|Aceptado/i.test(estado)&&!/Rechazado/i.test(estado),status=accepted?'accepted':(/Aceptado/i.test(estado)?'accepted_with_errors':'rejected');await ref.update({status,aeatStatus:estado,aeatCode:code,aeatDescription:desc,aeatHttpStatus:resp.statusCode,submittedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});if(record.invoiceId)await db.doc(`${ROOT}/invoices/${record.invoiceId}`).set({verifactuStatus:status,verifactuAeatStatus:estado,verifactuAeatCode:code,verifactuAeatDescription:desc,verifactuSubmittedAt:FieldValue.serverTimestamp()},{merge:true});return{ok:accepted,status,estado,code,description:desc,httpStatus:resp.statusCode}});
 
 export const verifactuBackendStatus=onCall({region:'europe-west1',secrets:[PFX,PFX_PASSWORD]},async req=>{if(!req.auth)throw new HttpsError('unauthenticated','LOGIN REQUERIDO');const r=await role(req.auth.uid);if(!allowed(r))throw new HttpsError('permission-denied','ROL SIN PERMISO');return{backendReady:true,certificateReady:Boolean(PFX.value()),project:'aw999-71828',region:'europe-west1'}});
+
+
+export const retryPendingVerifactu=onSchedule({region:'europe-west1',schedule:'every 60 minutes',timeZone:'Europe/Madrid',secrets:[PFX,PFX_PASSWORD],timeoutSeconds:300,memory:'256MiB'},async()=>{
+  const settings=(await db.doc(`${ROOT}/settings/main`).get()).data()||{};
+  if(!settings.verifactuEnabled||!settings.verifactuBackendReady)return;
+  const pfxText=PFX.value();if(!pfxText)return;
+  const snap=await db.collection(`${ROOT}/fiscalRecords`).where('status','in',['prepared','pending_submission','retry']).limit(100).get();
+  const docs=[...snap.docs].sort((a,b)=>String(a.data().createdAt||a.data().generatedAt||'').localeCompare(String(b.data().createdAt||b.data().generatedAt||'')));
+  let waitSeconds=0;
+  for(const d of docs){
+    if(waitSeconds>0)await new Promise(resolve=>setTimeout(resolve,Math.min(waitSeconds,60)*1000));
+    const ref=d.ref,record=d.data(),environment=settings.verifactuEnvironment||'test';
+    try{
+      if(environment==='production'&&!settings.verifactuProductionConfirmed)throw new Error('Producción no confirmada');
+      const xml=envelope(record),resp=await postXml(environment==='production'?PROD:TEST,xml,Buffer.from(pfxText,'base64'),PFX_PASSWORD.value());
+      const estado=extract(resp.body,'EstadoRegistro')||extract(resp.body,'EstadoEnvio')||'',code=extract(resp.body,'CodigoErrorRegistro')||'',desc=extract(resp.body,'DescripcionErrorRegistro')||'',wait=Number(extract(resp.body,'TiempoEsperaEnvio')||0);
+      const accepted=/Correcto|Aceptado/i.test(estado)&&!/Rechazado/i.test(estado),status=accepted?'accepted':(/Aceptado/i.test(estado)?'accepted_with_errors':'rejected');
+      await ref.update({status,aeatStatus:estado,aeatCode:code,aeatDescription:desc,aeatHttpStatus:resp.statusCode,aeatWaitSeconds:wait,submittedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
+      if(record.invoiceId)await db.doc(`${ROOT}/invoices/${record.invoiceId}`).set({verifactuStatus:status,verifactuAeatStatus:estado,verifactuAeatCode:code,verifactuAeatDescription:desc,verifactuSubmittedAt:FieldValue.serverTimestamp()},{merge:true});
+      waitSeconds=wait;
+    }catch(error){
+      await ref.set({status:'retry',lastError:String(error?.message||error).slice(0,1000),lastRetryAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      waitSeconds=0;
+    }
+  }
+});
