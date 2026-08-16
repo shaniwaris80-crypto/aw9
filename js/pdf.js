@@ -22,34 +22,44 @@ export function invoicePdfBlob(inv,client,settings={},internal=false){
     l.mode==='caja_kg'?numText(l.net):numText(l.billedQty),
     `${Number(l.price).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} €`,`${l.vat}%`,money(l.base)
   ]);
-  doc.autoTable({startY,head:[['CÓD.','PRODUCTO','MODO','CANT.','KG/CAJA','BRUTO','TARA','NETO','PRECIO','IVA','IMPORTE']],body,styles:{font:'helvetica',fontSize:7,cellPadding:1.6,overflow:'linebreak'},headStyles:{fontStyle:'bold'},columnStyles:{1:{cellWidth:33},2:{cellWidth:18},8:{halign:'right'},9:{halign:'center'},10:{halign:'right'}},didDrawPage:data=>{doc.setFontSize(7);doc.setTextColor(100);doc.text(`ARW2026 · ${C(inv.number||'BORRADOR')} · PÁGINA ${data.pageNumber}`,105,291,{align:'center'});doc.setTextColor(0);}});
-  let y=doc.lastAutoTable.finalY+6;if(y>225){doc.addPage();y=18;}
-  if(x.transport||x.globalDiscount){doc.setFontSize(8);doc.setTextColor(80);const bits=[];if(x.globalDiscount)bits.push(`DESCUENTO: ${money(x.globalDiscount)}`);if(x.transport)bits.push(`TRANSPORTE INCLUIDO EN BASE: ${money(x.transport)}`);doc.text(bits.join('   ·   '),15,y);doc.setTextColor(0);y+=6;}
+  doc.autoTable({
+    startY,head:[['CÓD.','PRODUCTO','MODO','CANT.','KG/CAJA','BRUTO','TARA','NETO','PRECIO','IVA','IMPORTE']],body,
+    styles:{font:'helvetica',fontSize:7,cellPadding:1.7,overflow:'linebreak',lineColor:[226,232,240],lineWidth:.08},
+    headStyles:{fontStyle:'bold',fillColor:[30,41,59],textColor:[255,255,255]},
+    columnStyles:{1:{cellWidth:33},2:{cellWidth:18},8:{halign:'right'},9:{halign:'center'},10:{halign:'right'}},
+    didParseCell:data=>{if(data.section==='body'){data.cell.styles.fillColor=data.row.index%2===0?[248,250,252]:[255,252,242];if(data.column.index===0)data.cell.styles.fontStyle='bold';}},
+    didDrawPage:data=>{doc.setFontSize(7);doc.setTextColor(100);doc.text(`ARW2026 · ${C(inv.number||'BORRADOR')} · PÁGINA ${data.pageNumber}`,105,291,{align:'center'});doc.setTextColor(0);}
+  });
+  let y=doc.lastAutoTable.finalY+6;if(y>220){doc.addPage();y=18;}
   const hasRE=Number(x.equivalenceTotal||0)!==0||x.equivalenceSurcharge;
   const taxHead=hasRE?['TIPO','BASE','IVA','R.E.','CUOTA R.E.']:['TIPO','BASE','IVA'];
   const taxBody=x.vatBreakdown.map(v=>hasRE?[`IVA ${v.rate}%`,money(v.base),money(v.vat),v.reRate?`${v.reRate}%`:'—',money(v.re||0)]:[`IVA ${v.rate}%`,money(v.base),money(v.vat)]);
-  doc.autoTable({startY:y,head:[taxHead],body:taxBody,theme:'plain',styles:{fontSize:8,cellPadding:1.4},headStyles:{fontStyle:'bold',fillColor:[245,247,250],textColor:[30,41,59]},columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},margin:{left:112,right:15}});
-  y=doc.lastAutoTable.finalY+5;if(y>247){doc.addPage();y=22;}
-  const boxX=112,boxW=83,boxH=hasRE?35:30;
-  doc.setDrawColor(15,23,42);doc.setLineWidth(.5);doc.roundedRect(boxX,y,boxW,boxH,2,2);
-  doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text('BASE IMPONIBLE',boxX+6,y+7);doc.text(money(x.base),boxX+boxW-6,y+7,{align:'right'});
-  doc.text('IVA TOTAL',boxX+6,y+13);doc.text(money(x.vatTotal),boxX+boxW-6,y+13,{align:'right'});
-  let totalBandY=y+18;
-  if(hasRE){doc.text('RECARGO EQUIVALENCIA',boxX+6,y+19);doc.text(money(x.equivalenceTotal||0),boxX+boxW-6,y+19,{align:'right'});totalBandY=y+23;}
-  doc.setFillColor(15,23,42);doc.roundedRect(boxX,totalBandY,boxW,boxH-(totalBandY-y),2,2,'F');doc.setTextColor(255);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('TOTAL FACTURA',boxX+6,totalBandY+8);doc.text(money(x.total),boxX+boxW-6,totalBandY+8,{align:'right'});doc.setTextColor(0);
+  doc.autoTable({startY:y,head:[taxHead],body:taxBody,theme:'plain',styles:{fontSize:8,cellPadding:1.4},headStyles:{fontStyle:'bold',fillColor:[241,245,249],textColor:[30,41,59]},columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},margin:{left:105,right:15}});
+  y=doc.lastAutoTable.finalY+5;if(y>238){doc.addPage();y=22;}
+
+  const productNet=Number(x.productBase||0)-Number(x.globalDiscount||0);
+  const rows=[['PRODUCTOS',money(x.productBase)]];
+  if(x.globalDiscount)rows.push(['DESCUENTO',`- ${money(x.globalDiscount)}`]);
+  rows.push(['TRANSPORTE',money(x.transport)],['IVA TOTAL',money(x.vatTotal)]);
+  if(hasRE)rows.push(['RECARGO EQUIVALENCIA',money(x.equivalenceTotal||0)]);
+  const boxX=105,boxW=90,rowH=6.2,totalH=12,boxH=rows.length*rowH+totalH+4;
+  doc.setDrawColor(30,41,59);doc.setLineWidth(.65);doc.rect(boxX,y,boxW,boxH);
+  doc.setFontSize(8);doc.setFont('helvetica','normal');let ry=y+6;
+  for(const [label,value] of rows){doc.text(label,boxX+5,ry);doc.setFont('helvetica','bold');doc.text(value,boxX+boxW-5,ry,{align:'right'});doc.setFont('helvetica','normal');ry+=rowH;}
+  const totalY=y+boxH-totalH;doc.setFillColor(30,41,59);doc.rect(boxX,totalY,boxW,totalH,'F');doc.setTextColor(255);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('TOTAL FACTURA',boxX+5,totalY+7.8);doc.setFontSize(15);doc.text(money(x.total),boxX+boxW-5,totalY+8,{align:'right'});doc.setTextColor(0);
   y+=boxH+6;
   doc.setFont('helvetica','bold');doc.setFontSize(8);doc.text(`PAGADO: ${money(x.paid)}   ·   PENDIENTE: ${money(x.pending)}`,195,y,{align:'right'});doc.setFont('helvetica','normal');
-  if(['credit','debit'].includes(inv.type)){doc.setFont('helvetica','bold');doc.text(`RECTIFICA: ${C(inv.originalInvoiceNumber||'')}`,15,y);doc.setFont('helvetica','normal');doc.text(`MOTIVO: ${C(inv.reason||'')}`,15,y+5,{maxWidth:90});}
-  if(inv.notes){doc.setFontSize(8);doc.text(`OBSERVACIONES: ${C(inv.notes)}`,15,y+11,{maxWidth:90});}
+  if(['credit','debit'].includes(inv.type)){doc.setFont('helvetica','bold');doc.text(`RECTIFICA: ${C(inv.originalInvoiceNumber||'')}`,15,y);doc.setFont('helvetica','normal');doc.text(`MOTIVO: ${C(inv.reason||'')}`,15,y+5,{maxWidth:85});}
+  if(inv.notes){doc.setFontSize(8);doc.text(`OBSERVACIONES: ${C(inv.notes)}`,15,y+11,{maxWidth:85});}
   if(internal){let iy=Math.max(y+18,250);if(iy>270){doc.addPage();iy=20;}doc.setFont('helvetica','bold');doc.text('COPIA INTERNA · NO ENTREGAR AL CLIENTE',15,iy);iy+=5;doc.setFont('helvetica','normal');for(const l of x.lines){const cost=(l.mode==='caja_kg'?l.net:l.qty)*Number(l.buyPriceSnapshot||0);doc.text(`${C(l.name)} · COSTE ${money(cost)} · BASE ${money(l.base)} · ${lineDescription(l)}`,15,iy,{maxWidth:180});iy+=4;if(iy>280){doc.addPage();iy=20;}}}
   return doc.output('blob');
 }
 export function saveBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
 export function invoiceFilename(inv,client){const n=upper(client?.name||inv.clientSnapshot?.name||'CLIENTE').replace(/[^A-Z0-9ÁÉÍÓÚÜÑ]+/g,'_').replace(/^_|_$/g,'');return `FACTURA_${n}_${inv.date}_${inv.number||'BORRADOR'}.pdf`;}
-export function downloadInvoice(inv,client,settings,internal=false){const blob=invoicePdfBlob(inv,client,settings,internal);saveBlob(blob,invoiceFilename(inv,client));}
+export function downloadInvoice(inv,client,settings,internal=false){const run=()=>{const blob=invoicePdfBlob(inv,client,settings,internal);saveBlob(blob,invoiceFilename(inv,client))};if(window.matchMedia?.('(max-width:760px)').matches){if('requestIdleCallback'in window)requestIdleCallback(run,{timeout:700});else setTimeout(run,60)}else run();}
 export async function downloadDayZip(invoices,clients,settings,date){
   if(!window.JSZip)throw new Error('JSZIP NO CARGADO');const zip=new window.JSZip();let summary=`ARW2026 · FACTURAS ${date}\n\n`;
-  for(const inv of invoices){const c=clients.find(x=>x.id===inv.clientId)||inv.clientSnapshot||{};const blob=invoicePdfBlob(inv,c,settings);zip.file(invoiceFilename(inv,c),blob);const x=calcInvoice(inv);summary+=`${inv.number}\t${upper(c.name)}\t${money(x.total)}\tIVA ${money(x.vatTotal)}\tRE ${money(x.equivalenceTotal||0)}\n`;}
+  for(const inv of invoices){const c=clients.find(x=>x.id===inv.clientId)||inv.clientSnapshot||{};const blob=invoicePdfBlob(inv,c,settings);zip.file(invoiceFilename(inv,c),blob);const x=calcInvoice(inv);summary+=`${inv.number}\t${upper(c.name)}\t${money(x.total)}\tIVA ${money(x.vatTotal)}\tTRANSPORTE ${money(x.transport)}\tRE ${money(x.equivalenceTotal||0)}\n`;}
   zip.file('RESUMEN.txt',summary);const out=await zip.generateAsync({type:'blob'});saveBlob(out,`ARW2026_FACTURAS_${date}.zip`);
 }
 export function statementPdf(client,invoices,payments){const jsPDF=getJsPDF();const doc=new jsPDF();doc.setFont('helvetica','bold');doc.setFontSize(18);doc.text(`ESTADO DE CUENTA · ${upper(client.name)}`,15,18);const rows=invoices.map(i=>{const x=calcInvoice(i);return[i.date,i.number||'BORRADOR',upper(i.status),money(x.total),money(x.paid),money(x.pending)]});doc.autoTable({startY:28,head:[['FECHA','FACTURA','ESTADO','TOTAL','PAGADO','PENDIENTE']],body:rows,styles:{fontSize:8}});saveBlob(doc.output('blob'),`ESTADO_CUENTA_${upper(client.name).replace(/\W+/g,'_')}.pdf`);}
