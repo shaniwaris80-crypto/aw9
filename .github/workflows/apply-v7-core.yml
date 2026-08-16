@@ -30,3 +30,4 @@ jobs:
           git add js index.html service-worker.js README.md
           git commit -m 'ARW2026 PRO v7: núcleo, monitor y VERI*FACTU' || exit 0
           git push origin HEAD:arw2026-pro-v7-work
+# retry-v2
