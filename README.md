@@ -116,3 +116,7 @@ GitHub Actions comprueba sintaxis, imports, pruebas de dominio y pruebas financi
 - La remisión real a AEAT solo se habilita mediante backend seguro con certificado; nunca se almacena el certificado en el navegador.
 - PWA mejorada con recursos críticos y librerías externas cacheables tras la primera carga.
 - Pruebas de dominio, finanzas, auditoría, VERI*FACTU, reglas Firestore y navegador.
+
+- Las facturas nuevas intentan archivar una copia PDF original e inmutable en Firebase Storage; un fallo de Storage no revierte una factura fiscal ya emitida.
+- MONITOR PRO muestra online/offline, caché, escrituras pendientes y errores del dispositivo.
+- Las colecciones de ruido (auditoría, notificaciones y registros fiscales) se limitan en escucha en tiempo real; facturas/compras permanecen completas para no falsear análisis financieros.
