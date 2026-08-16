@@ -3,11 +3,32 @@ service firebase.storage {
   match /b/{bucket}/o {
     function signedIn(){ return request.auth != null; }
     function owner(){ return signedIn() && (request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2' || request.auth.token.email == 'shaniwaris80@gmail.com'); }
-    function member(){ return signedIn() && firestore.exists(/databases/(default)/documents/companies/arw2026/members/$(request.auth.uid)) && firestore.get(/databases/(default)/documents/companies/arw2026/members/$(request.auth.uid)).data.active == true; }
-    match /companies/arw2026/{allPaths=**} {
-      allow read: if owner() || member();
-      allow create, update: if (owner() || member()) && request.resource.size < 15 * 1024 * 1024;
-      allow delete: if owner();
+    function memberPath(){ return /databases/(default)/documents/companies/arw2026/members/$(request.auth.uid); }
+    function member(){ return signedIn() && firestore.exists(memberPath()) && firestore.get(memberPath()).data.active == true; }
+    function role(){ return owner() ? 'owner' : (member() ? firestore.get(memberPath()).data.role : 'none'); }
+    function manager(){ return owner() || role() in ['admin','manager']; }
+    function billing(){ return manager() || role() == 'billing'; }
+    function warehouse(){ return manager() || role() == 'warehouse'; }
+    function delivery(){ return manager() || role() == 'delivery'; }
+    function validFile(){ return request.resource.size < 15 * 1024 * 1024; }
+
+    match /companies/arw2026/invoices/{invoiceId}/{fileName} {
+      allow read: if billing();
+      allow create: if billing() && validFile() && request.resource.contentType == 'application/pdf';
+      allow update, delete: if false;
+    }
+    match /companies/arw2026/purchases/{purchaseId}/{fileName} {
+      allow read: if warehouse() || billing();
+      allow create: if warehouse() && validFile() && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+      allow update, delete: if false;
+    }
+    match /companies/arw2026/deliveryNotes/{docId}/{fileName} {
+      allow read: if delivery() || billing();
+      allow create: if delivery() && validFile() && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+      allow update, delete: if false;
+    }
+    match /companies/arw2026/system/{allPaths=**} {
+      allow read, write: if owner() && validFile();
     }
     match /{allPaths=**} { allow read, write: if false; }
   }
