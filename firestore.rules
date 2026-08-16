@@ -2,7 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn(){ return request.auth != null; }
-    function owner(){ return signedIn() && (request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2' || request.auth.token.email == 'shaniwaris80@gmail.com'); }
+    function hasEmail(){ return signedIn() && request.auth.token.keys().hasAny(['email']); }
+    function owner(){ return signedIn() && (request.auth.uid == 'o6rMhcEyUXUstmb7ptClXSv8ejQ2' || (hasEmail() && request.auth.token.email == 'shaniwaris80@gmail.com')); }
     function memberPath(){ return /databases/$(database)/documents/companies/arw2026/members/$(request.auth.uid); }
     function member(){ return signedIn() && exists(memberPath()) && get(memberPath()).data.active == true; }
     function role(){ return owner() ? 'owner' : (member() ? get(memberPath()).data.role : 'none'); }
