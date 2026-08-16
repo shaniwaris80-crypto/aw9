@@ -1,17 +1,19 @@
-# ARW2026 v4
+# ARW2026 v5
 
-Sistema operativo de facturación, pedidos, reparto, clientes, precios, stock, compras, cobros y reportes para la ruta y negocios asociados.
+Sistema operativo de facturación, pedidos, reparto, clientes, precios, stock, compras, cobros y análisis financiero para la ruta y negocios asociados.
 
 ## Flujo principal
-PEDIDO → PREPARACIÓN / COMPRA → ENTREGA REAL → REVISIÓN → FACTURA → COBRO → HISTORIAL
+PEDIDO → PREPARACIÓN / COMPRA → ENTREGA REAL → REVISIÓN → FACTURA → COBRO → HISTORIAL → ANÁLISIS FINANCIERO
 
-## Principios de v4
+## Principios
 - Firestore es la fuente de verdad multidispositivo.
 - Las facturas emitidas y la numeración no se reinician al recargar el catálogo.
 - Los reinicios semanales son cortes operativos: no borran historial fiscal.
 - El stock se corrige mediante movimientos y por ubicación.
+- El reset total lleva a cero tanto stock positivo como negativo, incluso cuando dos ubicaciones se compensan entre sí.
 - Las operaciones críticas usan validación central y transacciones Firestore.
 - Los PDFs emitidos usan snapshot del emisor para no cambiar al modificar datos futuros.
+- Las líneas de factura nuevas congelan el coste de compra del producto para conservar el margen histórico.
 
 ## Caja × kg
 `caja_kg` multiplica automáticamente `cajas × kgPerBox`. Ejemplo: MACHO MADURO, 2 cajas × 22 kg = 44 kg. Las cajas deben ser enteras. `caja_fija` factura por caja; `kg`, `ud` y `manojo` por su unidad.
@@ -27,10 +29,36 @@ PEDIDO → PREPARACIÓN / COMPRA → ENTREGA REAL → REVISIÓN → FACTURA → 
 - ZIP del día y marcado manual de factura enviada.
 - Último precio real del cliente como ayuda cuando no existe tarifa especial.
 
+## Centro financiero
+Disponible en el menú como `CENTRO FINANCIERO` y filtrable por periodo operativo, mes, trimestre, año o histórico completo.
+
+### Fórmulas
+- VENTA MERCANCÍA = base de los productos después de descuentos, sin IVA ni recargo.
+- TRANSPORTE COBRADO = transporte repercutido en facturas, sin IVA.
+- COSTE VENDIDO = cantidad realmente facturada × coste unitario histórico/congelado.
+- MARGEN MERCANCÍA = venta mercancía − coste vendido.
+- BENEFICIO BRUTO = margen mercancía + transporte cobrado.
+- BENEFICIO OPERATIVO = beneficio bruto − gastos registrados.
+- IVA y recargo de equivalencia nunca se consideran beneficio.
+
+### Análisis incluidos
+- Por factura: mercancía, transporte, coste vendido, margen, beneficio, margen %, total, deuda y calidad del coste.
+- Por producto: comprado, gasto de compra, vendido neto, ingresos, transporte imputado, coste vendido, beneficio, margen, stock, valor y venta potencial.
+- Por cliente: facturas, mercancía, transporte, coste vendido, beneficio, margen, total facturado, pendiente y ticket medio.
+- Stock: valor actual a coste, venta potencial a precios generales actuales y margen potencial.
+- Compras: base sin IVA y desembolso total con IVA.
+
+### Calidad de costes
+1. `COSTE CONGELADO`: coste guardado en la propia línea al crear/emitir la factura.
+2. `COSTE HISTÓRICO`: coste recuperado del historial de compras anterior a la factura.
+3. `COSTE ESTIMADO`: solo cuando no existe información histórica; usa el coste actual y se marca claramente como estimación.
+
 ## Stock
 - Stock total y por ALMACÉN, FURGONETA, SAN PABLO, SAN LESMES y SANTIAGO.
 - Visualización en cajas + kg cuando procede.
 - Reset total por cada ubicación conservando todo el histórico.
+- El reset incluye negativos: `-5` genera `+5`; `+5` genera `-5`.
+- Un producto con `ALMACÉN -5` y `FURGONETA +5` ya no se considera “0” hasta que ambas ubicaciones estén realmente a cero.
 - Ajustes, traspasos, mermas, devoluciones e inventario físico.
 - Producto 360º con movimientos y ventas netas, descontando rectificativas.
 
@@ -53,16 +81,17 @@ PEDIDO → PREPARACIÓN / COMPRA → ENTREGA REAL → REVISIÓN → FACTURA → 
 ## Administración
 - Reportes por mes, trimestre y año.
 - Libro de ventas y compras en Excel.
+- Exportación del análisis financiero a Excel.
 - Cierre mensual con controles previos y bloqueo de nuevas emisiones/compras del mes cerrado.
 - Roles: owner, admin, manager, billing, warehouse y delivery.
 - Caja/bancos, envases retornables, usuarios/roles y backup JSON.
 - La restauración automática protege facturas, cobros, series, cierres, auditoría y miembros.
 
 ## Datos maestros
-El catálogo y la cartera inicial están en `js/data.js` con IDs estables. La carga maestra completa estructura y datos faltantes, pero v4 no reinicia la serie ni pisa precios, costes o IVA editados posteriormente.
+El catálogo y la cartera inicial están en `js/data.js` con IDs estables. La carga maestra completa estructura y datos faltantes, pero no reinicia la serie ni pisa precios, costes o IVA editados posteriormente.
 
 ## Firebase
-Datos bajo `companies/arw2026`. Deben publicarse manualmente `firestore.rules` y, si se usa Storage, `storage.rules` en el proyecto `aw999-71828`. También debe estar autorizado `shaniwaris80-crypto.github.io` en Firebase Authentication.
+Datos bajo `companies/arw2026`. Deben publicarse manualmente `firestore.rules` y, si se usa Storage, `storage.rules` en el proyecto Firebase. También debe estar autorizado el dominio de GitHub Pages en Firebase Authentication.
 
 ## Validación automática
-GitHub Actions comprueba sintaxis, imports y pruebas de dominio: caja × kg, transporte 10/15%, IVA, recargo, precio cero, cajas fraccionadas, stock por ubicación, fecha local, importador, ambigüedad de productos, coste con portes y corte operativo por timestamp. Además verifica invariantes estáticas como numeración protegida y validación central de emisión.
+GitHub Actions comprueba sintaxis, imports, pruebas de dominio y pruebas financieras. Entre otras invariantes: caja × kg, transporte 10/15%, IVA, recargo, precio cero, cajas fraccionadas, stock por ubicación, fecha local, importador, coste con portes, corte operativo, beneficio por factura, coste histórico y reset de stock negativo aunque el total global del producto sea cero.
