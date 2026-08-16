@@ -9,7 +9,7 @@ on:
         type: boolean
   push:
     branches: [main]
-    paths: ['firestore.rules','storage.rules','firestore.indexes.json','firebase.json']
+    paths: ['firestore.rules','storage.rules','firestore.indexes.json','firebase.json','functions/**']
 permissions:
   contents: read
   id-token: write
@@ -20,19 +20,28 @@ jobs:
       FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AW999 }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: {node-version: '22'}
-      - name: Comprobar credenciales
+      - name: Estado de credenciales
         run: |
-          if [ -z "$FIREBASE_SA" ]; then echo 'Falta secret FIREBASE_SERVICE_ACCOUNT_AW999'; exit 1; fi
+          if [ -z "$FIREBASE_SA" ]; then
+            echo '::notice::Firebase PRO preparado, pero falta el secret FIREBASE_SERVICE_ACCOUNT_AW999. No se desplegará nada.'
+          else
+            echo 'Credenciales Firebase disponibles.'
+          fi
       - id: auth
+        if: ${{ env.FIREBASE_SA != '' }}
         uses: google-github-actions/auth@v2
         with:
           credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_AW999 }}'
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: npm install -g firebase-tools
+      - if: ${{ env.FIREBASE_SA != '' }}
+        uses: google-github-actions/setup-gcloud@v2
+      - if: ${{ env.FIREBASE_SA != '' }}
+        uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - if: ${{ env.FIREBASE_SA != '' }}
+        run: npm install -g firebase-tools
       - name: Desplegar reglas e índices
+        if: ${{ env.FIREBASE_SA != '' }}
         run: firebase deploy --project aw999-71828 --only firestore:rules,firestore:indexes,storage
       - name: Desplegar Functions bajo confirmación
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_functions }}
+        if: ${{ env.FIREBASE_SA != '' && github.event_name == 'workflow_dispatch' && inputs.deploy_functions }}
         run: firebase deploy --project aw999-71828 --only functions
