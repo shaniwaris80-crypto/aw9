@@ -7,11 +7,10 @@ export const FIREBASE_CONFIG = {
   appId: "1:401083552527:web:80a27997b3e4d2e829e47a",
   measurementId: "G-768W72H2Q0"
 };
-
 export const ARW = {
   appId: "arw2026",
   companyPath: "companies/arw2026",
   ownerEmail: "shaniwaris80@gmail.com",
   ownerUid: "o6rMhcEyUXUstmb7ptClXSv8ejQ2",
-  version: "6.0.0"
+  version: "7.0.0"
 };
