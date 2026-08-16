@@ -1,4 +1,4 @@
-# ARW2026 v5
+# ARW2026 PRO v7
 
 Sistema operativo de facturación, pedidos, reparto, clientes, precios, stock, compras, cobros y análisis financiero para la ruta y negocios asociados.
 
@@ -106,3 +106,13 @@ GitHub Actions comprueba sintaxis, imports, pruebas de dominio y pruebas financi
 - Cierre mensual con stock y coste a fecha de cierre.
 - Ubicación de salida de stock configurable.
 - Pruebas automáticas de dominio, finanzas, permisos, salud e invariantes.
+
+
+## ARW2026 PRO v7
+- Rama estable V6 protegida antes de iniciar V7.
+- Monitor de sincronización, caché, errores y pendientes.
+- Reglas Firestore reforzadas: cobros, movimientos de stock y registros fiscales inmutables.
+- Centro VERI*FACTU con huella SHA-256, encadenamiento, QR tributario y registros locales.
+- La remisión real a AEAT solo se habilita mediante backend seguro con certificado; nunca se almacena el certificado en el navegador.
+- PWA mejorada con recursos críticos y librerías externas cacheables tras la primera carga.
+- Pruebas de dominio, finanzas, auditoría, VERI*FACTU, reglas Firestore y navegador.
