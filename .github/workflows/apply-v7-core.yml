@@ -1,0 +1,32 @@
+name: Aplicar ARW2026 PRO V7 core
+on:
+  push:
+    branches: [arw2026-pro-v7-work]
+    paths:
+      - 'tools/apply_v7_core.py'
+      - '.github/workflows/apply-v7-core.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: arw2026-pro-v7-work}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: python3 tools/apply_v7_core.py
+      - name: Validar sintaxis y huella oficial
+        run: |
+          find js -name '*.js' -print0 | xargs -0 -n1 node --check
+          node tests/verifactu.test.mjs
+          node tests/domain.test.mjs
+          node tests/finance.test.mjs
+          node tests/audit.test.mjs
+      - name: Commit core V7
+        run: |
+          git config user.name 'shaniwaris80-crypto'
+          git config user.email 'shaniwaris80@gmail.com'
+          git add js index.html service-worker.js README.md
+          git commit -m 'ARW2026 PRO v7: núcleo, monitor y VERI*FACTU' || exit 0
+          git push origin HEAD:arw2026-pro-v7-work
