@@ -1,6 +1,6 @@
 import {FIREBASE_CONFIG,ARW} from '../firebase-config.js';
 import {MASTER_PRODUCTS,MASTER_CLIENTS,MASTER_SUPPLIERS,MASTER_VERSION} from './data.js';
-import {calcInvoice,stockMovementQty,now,uid,normalize} from './domain.js';
+import {calcInvoice,stockMovementQty,stockQuantity,round2,today,now,uid,normalize} from './domain.js';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
 import {getAuth,setPersistence,browserLocalPersistence,signInWithEmailAndPassword,signInWithPopup,GoogleAuthProvider,signOut,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,getDocs,setDoc,deleteDoc,updateDoc,onSnapshot,writeBatch,runTransaction,query,orderBy,limit,enableMultiTabIndexedDbPersistence} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
@@ -112,4 +112,24 @@ export async function createRectification(original,newLines,reason,user,directio
     tx.set(ref('invoices',id),{...credit,issuedAt:now(),updatedAt:now()});tx.set(sref,{...s,next:next+1,updatedAt:now()},{merge:true});tx.set(ref('invoices',original.id),{rectificationIds:[...(original.rectificationIds||[]),id],updatedAt:now()},{merge:true});const aid=uid('a');tx.set(ref('audit',aid),{id:aid,action:'RECTIFICATION',entity:'invoices',entityId:id,originalId:original.id,userEmail:user?.email||'',userUid:user?.uid||'',at:now()});return credit;
   });
 }
+
+export async function zeroAllStockCloud(products,moves,user,reason='REINICIO DE STOCK'){
+  if(!isOwner(user))throw new Error('SOLO EL PROPIETARIO PUEDE PONER TODO EL STOCK A 0');
+  const nonZero=(products||[]).map(p=>({p,qty:stockQuantity(moves||[],p.id)})).filter(x=>Math.abs(x.qty)>.0001);
+  if(!nonZero.length)return 0;
+  const batch=writeBatch(db),stamp=now(),date=today();
+  for(const {p,qty} of nonZero){const id=uid('sm');batch.set(ref('stockMoves',id),{id,productId:p.id,qty:round2(-qty),type:'stock_reset',location:'ALMACEN',sourceId:'MANUAL_RESET',note:String(reason||'').toUpperCase(),date,createdAt:stamp})}
+  const aid=uid('a');batch.set(ref('audit',aid),{id:aid,action:'STOCK_RESET_ALL',entity:'stockMoves',count:nonZero.length,reason:String(reason||'').toUpperCase(),userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});
+  await batch.commit();return nonZero.length;
+}
+
+export async function resetOperationalWeek(summary={},user){
+  if(!isOwner(user))throw new Error('SOLO EL PROPIETARIO PUEDE INICIAR UNA NUEVA SEMANA');
+  const start=today(),id=`week_${start}_${Date.now().toString(36)}`,stamp=now(),batch=writeBatch(db);
+  batch.set(ref('closures',id),{id,type:'weekly_reset',date:start,summary,createdAt:stamp,userEmail:user?.email||'',userUid:user?.uid||''});
+  batch.set(ref('settings','main'),{operationalWeekStart:start,lastWeeklyResetAt:stamp,updatedAt:stamp},{merge:true});
+  const aid=uid('a');batch.set(ref('audit',aid),{id:aid,action:'WEEK_RESET',entity:'settings',entityId:'main',summary,userEmail:user?.email||'',userUid:user?.uid||'',at:stamp});
+  await batch.commit();return id;
+}
+
 export async function forceMasterData(user){if(!isOwner(user))throw new Error('SOLO PROPIETARIO');await setDoc(ref('settings','main'),{masterVersion:'',updatedAt:now()},{merge:true});await ensureMasterData(user);}
