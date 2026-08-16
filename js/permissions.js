@@ -7,7 +7,7 @@ export const CAPABILITY_ROLES={
   routeWrite:['owner','admin','manager','billing','warehouse','delivery'],quoteWrite:['owner','admin','manager','billing'],deliveryNoteWrite:['owner','admin','manager','billing','delivery'],
   expenseWrite:['owner','admin','manager','billing'],cashBankWrite:['owner','admin','manager','billing'],containerWrite:['owner','admin','manager','warehouse','delivery'],
   financeRead:['owner','admin','manager','billing'],closeMonth:['owner','admin','manager'],auditRead:['owner','admin','manager'],monitorRead:['owner','admin','manager'],
-  verifactuRead:['owner','admin','manager','billing'],verifactuAdmin:['owner'],memberAdmin:['owner'],backupAdmin:['owner'],masterReload:['owner'],settingsWrite:['owner','admin','manager']
+  verifactuRead:['owner','admin','manager','billing'],verifactuSubmit:['owner','admin','manager','billing'],verifactuAdmin:['owner'],memberAdmin:['owner'],backupAdmin:['owner'],masterReload:['owner'],settingsWrite:['owner','admin','manager']
 };
 export function can(role,capability){return Boolean(CAPABILITY_ROLES[capability]?.includes(role));}
 export const ACTION_CAPABILITY={
@@ -17,6 +17,6 @@ export const ACTION_CAPABILITY={
   'expense-new':'expenseWrite','price-mass':'priceWrite','route-new':'routeWrite','report-sales':'invoiceRead','report-purchases':'invoiceRead','finance-export':'financeRead','master-reload':'masterReload','settings-stock':'settingsWrite',
   'transfer-new':'stockOps','waste-new':'stockOps','return-new':'stockOps','inventory-new':'stockOps','doc-quote':'quoteWrite','doc-proforma':'quoteWrite','doc-delivery':'deliveryNoteWrite','close-month':'closeMonth',
   'backup-download':'backupAdmin','backup-restore':'backupAdmin','member-new':'memberAdmin','cash-new':'cashBankWrite','bank-new':'cashBankWrite','container-new':'containerWrite',
-  'monitor-clear-errors':'monitorRead','verifactu-settings':'verifactuAdmin','verifactu-verify':'verifactuRead','verifactu-export':'verifactuRead'
+  'monitor-clear-errors':'monitorRead','verifactu-settings':'verifactuAdmin','verifactu-verify':'verifactuRead','verifactu-export':'verifactuRead','verifactu-submit':'verifactuSubmit'
 };
 export function canAction(role,action){const cap=ACTION_CAPABILITY[action];return cap?can(role,cap):true;}
